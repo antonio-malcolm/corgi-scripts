@@ -1,0 +1,356 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#   
+# Corgi Scripts is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-scripts-core.shlib - The core library of variables and functions for, and shared by, the corgi family of shell-based utilities.
+# These functions can also be used by any script which sources this file.
+#
+# v2015.05.18
+#
+# Authored by Antonio Malcolm
+
+
+# Convenience string for delimitation
+# (This makes dynamically building and parsing argument strings easier)
+corgiNewlineDelimiter='
+'
+
+
+# Convenience string, in the case we need an empty (NULL) value
+# (This makes dynamically building and parsing argument strings easier) 
+corgiNoBone='.'
+
+# Echos the nth arg from an array of args.
+# A positive number obtains from the head, a negative number obtains from the tail.
+#
+# $1 - number, required, the position of the desired arg in the arg array, from head (positive), or tail (negative)
+# $2 - arg array, required, from which we are obtaining the desired arg
+corgiGetNthArg() {
+
+  idx=$1
+
+  shift
+
+  if [ $idx -gt 0 ]
+  then
+    shift $idx
+  else
+    shift $(($# + $idx))
+  fi
+
+  echo "$1"
+
+}
+
+
+# Returns one or zero, based on whether or not the first arg is prefixed by the second arg
+# (This is useful for simple, "one-off", if statements... for anyhting more complex,
+# it would likely be cleaner/more readable to use a case block.)
+#
+# $1 - value, required, to be checked for whether or not it is prefixed by the second arg
+# $2 - value, required, to be checked for whether or not it is a prefix of the first arg
+corgiStartsWith() {
+
+  case "$1" in
+    "$2"*) return 0 ;;
+    *) return 1 ;;
+  esac
+
+}
+
+
+# Returns one or zero, based on whether or not the first arg is appended by the second arg
+# (This is useful for simple, "one-off", if statements... for anyhting more complex,
+# it would likely be cleaner/more readable to use a case block.)
+#
+# $1 - value, required, to be checked for whether or not it is appended by the second arg
+# $2 - value, required, to be checked for whether or not it is an appendix of the first arg
+corgiEndsWith() {
+
+  case "$1" in
+    *"$2") return 0 ;;
+    *) return 1 ;;
+  esac
+
+}
+
+
+# Returns one or zero, based on whether or not an arg is zero length 
+# (or Corgi's "empty indicator" string, which can be used in case one needs 
+# to "indicate" an empty value, but can't use an actual empty value)
+# 0 indicates true (string is not zero length, and does not match Corgi's indicator string).
+# 1 indicates false (string is either empty or matches Corgi's indicator string)
+#
+# $1 - value, required, to be checked for emptiness
+corgiHas() {
+
+  if [ ! -z "$1" -a "$1" != "$corgiNoBone" ]
+  then
+    return 0
+  fi
+
+  return 1
+
+}
+
+
+# Echos a semi-unique string, based on the date in nanoseconds.
+# An arg can be provided as a prefix to be added to the head of the string.
+# If none is provided, this function provides a default.
+#
+# $1 - string, optional, a prefix with which prepend the id
+corgiMakeIdString() {
+
+  prefix="corgi-id-"
+
+  if [ $# -gt 0 ]
+  then
+    prefix="$1"
+  fi
+
+  echo "$prefix`date +%N`"
+
+}
+
+
+# Adds characters to the head or tail of a string, 
+# until reaches the desired length, and echos the result.
+#
+# $1 - string, required, to be padded with characters
+# $2 - string, required, character(s) to be used for padding
+# $3 - number, required, the desired length of the resulting, padded, string
+# $4 - string, optional, "after" (add to tail), or "before" (add to head), defaults to "after"
+corgiMakePaddedString() {
+
+  padding=''
+
+  string="$1"
+  pad="$2"
+  length=$3
+  placement='after'
+
+  if [ ${#string} -lt $length ]
+  then
+
+    amount=$(($length - ${#string}))
+
+    if [ $# -gt 3 -a "$4" = 'before' ]
+    then
+      placement="$4"
+    fi
+
+    for idx in `seq 1 $amount`
+    do
+      padding="$padding$pad"
+    done
+
+    if [ "$placement" = 'after' ]
+    then
+      string="$string$padding"
+    else
+      string="$padding$string"
+    fi
+
+  fi
+
+  echo "$string"
+
+}
+
+
+# Removes characters from the head or tail of a string, 
+# until it reaches the desired length, and echos the result.
+#
+#
+# $1 - string, required, to be trimmed
+# $3 - number, required, the desired length of the resulting, trimmed, string
+# $4 - string, optional, "after" (remove from tail), or "before" (remove from head), defaults to "after"
+corgiTrimString() {
+
+  length=$1
+  string="$2"
+  placement='after'  
+
+  if [ ${#string} -gt $length ]
+  then
+
+    if [ $# -gt 2 -a "$3" = 'before' ]
+    then
+      placement="$3"
+    fi
+
+    numberOfCharacters=$((${#string - $length}))
+
+    for idx in `seq 1 $numberOfCharacters`
+    do
+   
+      if [ "$placement" = 'after' ]
+      then
+        string="${string%?}"
+      else
+        string="${string#?}"
+      fi
+  
+    done
+
+  fi
+
+  echo "$string"
+
+}
+
+
+# This is a convenience function, useful for wrapping standard calls to shell functions and command line utilities.
+# When used in place of a direct call to another funtion or utility, arguments can be supplied as strings, representing pairs, as "name:value" or "name=value"
+# This function removes the need to provide arguments in any expected/specified order (and, therefore, the need to supply empty arguments, 
+# in order to maintain that order, where we can now simply omit them).
+#
+# NOTE: If desired, args can also be passed as they would normally, in their expected order, so this function provides both its own
+# implemenation for passing args, as well what's traditional.
+#
+# EXAMPLE:
+# A function, vocalizeAtTheMoonImpl(), requires 4 arguments. 
+# The first sets the vocalization (i.e., "bark", "howl", or "cry").
+# The second sets the volume (i.e., 10, 20, 30, ..., 100, or "low", "medium", or "high")
+# The third sets the number of times the vocalization should be made (i.e, 1, 2, 3, ..., 10, 20)
+# The fourth sets whether our animal should stay or go home when he's done (i.e., "stay" or "home")
+#
+# If any argument is empty, the function replaces it with a default value;
+# Therefore, we can call the function with any combination of supplied or empty args, which would normally look like this:
+#
+# vocalizeAtTheMoonImpl "" "" 2 "home"
+#
+# Even though we don't need to provide a value for the first two arguments, 
+# because there's an order in which it expects its args, we're forced to provide empty strings. 
+#
+# OTOH, we can easily wrap vocalizeAtTheMoonImpl() with a convenience method which implmeents corgiParseShellRequestImpl():
+#
+# vocalizeAtTheMoon() {
+#   corgiParseShellRequestImpl vocalizeAtTheMoonImpl "vocalization,volume,repetitions,stayOrHome" "$@"
+#   exit $?
+# }
+#
+# We can now utilize the functionality provided by vocalizeAtTheMoonImpl() without concerning ourselves with the number or order of arguments,
+# so long as we know, based on the arg names provided by the wrapper method, what args are accepted:
+#
+# vocalizeAtTheMoon "repetitions:2" "stayOrHome:home"
+#
+# OR, as noted above, you can provide args the traditional way:
+#
+# vocalizeAtTheMoon "" "" 2 "home"
+#
+# While the above example is quite simple, it describes how this might be useful, especially when used with more complex functions.
+#
+#
+# $1 - function, callback, the function or utility call being wrapped
+# $2 - string, argument names, comma-delimited, should match the names present in the name-value pairs provided to the function's wrapper function,
+#      and be provided in the order respective to the arguments expected by the wrapped callback function (i.e., "name1,name2,name3", to match callback --option $arg1 $arg2 $arg3)
+corgiParseShellRequestImpl() {
+
+  callbackArgs=''
+
+  callback=$1
+  argNames=$2
+  hasAtLeastOneNamed=false
+
+  shift
+  shift
+
+  while [ "$argNames" ]
+  do
+
+    argName="${argNames%%,*}"
+    argId1="$argName="
+    argId2="--$argName="
+    argId3="$argName:"
+    hasNamed=false
+
+    for arg in "$@"
+    do
+
+      case "$arg" in
+
+        $argId1*|$argId2*|$argId3*)
+
+          argId="$argId1"
+
+          case "$arg" in
+            $argId2*) argId="$argId2" ;;
+            $argId3*) argId="$argId3" ;;
+          esac
+
+          argValue="${arg#*$argId}"
+
+          if [ ! -z "$argValue" ]
+          then
+          
+            if [ -z "$callbackArgs" ]
+            then
+              callbackArgs="$argValue"
+            else
+              callbackArgs="$callbackArgs$corgiNewlineDelimiter"$argValue""
+            fi
+
+            hasNamed=true
+            hasAtLeastOneNamed=true
+
+          fi        
+
+        ;;
+
+      esac
+
+    done
+
+    if ! $hasNamed
+    then
+
+      if [ -z "$callbackArgs" ]
+      then
+        callbackArgs="$corgiNoBone"
+      else
+        callbackArgs="$callbackArgs$corgiNewlineDelimiter"$corgiNoBone""
+      fi
+
+    fi
+
+    if [ "$argNames" = "$argName" ]
+    then
+      argNames=''
+    else
+      argNames="${argNames#*,}"
+    fi
+
+  done
+
+  if $hasAtLeastOneNamed && [ ! -z "$callbackArgs" ]
+  then
+
+    systemIFS=$IFS
+    IFS=$corgiNewlineDelimiter
+
+    $callback $callbackArgs
+
+    IFS=$systemIFS
+
+  else 
+    $callback "$@"
+  fi
+
+  exit $?
+
+}
+
+
+# This is a convenience function, useful for wrapping standard calls to shell functions and command line utilities.
+# Refer to the documentation for #corgiParseShellRequest(), above, for a complete description.
+# This function wraps #corgiParseShellRequest() in a subshell, for isolation.
+corgiParseShellRequest() {
+  (corgiParseShellRequestImpl "$@")
+}

@@ -1,0 +1,257 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#   
+# Corgi Scripts is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-core.shlib - The core library of functions for, and shared by, Corgi shell-based utilites used to generate Openbox pipemenus.
+# These functions can also be used by any script which sources this file.
+#
+# v2015.05.18
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-scripts-core.shlib
+
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+corgiCoreMenuLib="$parentDirectory/lib/corgi/corgi-scripts-core.shlib"
+
+if [ ! -e "$corgiCoreMenuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-core.shlib): The core Corgi library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-core.shlib): The core Corgi library is not present. Exiting..."
+  exit 1
+fi
+
+. "$corgiCoreMenuLib"
+
+# Generates and echoes an XML string for an Openbox pipemenu
+#
+# $1 - string, required (may be empty), the immediate child of the pipemenu (normally, the XML string for an Openbox menu or item)
+corgiObPipeMenuImpl() {
+
+  content="$1"
+
+  if corgiHas "$content"
+  then
+    echo "<openbox_pipe_menu>$content</openbox_pipe_menu>"
+  else
+    echo "<openbox_pipe_menu>NO CONTENT AVAILABLE</openbox_pipe_menu>"
+  fi
+
+  exit $?
+
+}
+
+
+# Generates and echoes an XML string for an Openbox menu
+#
+# $1 - string, required (may be empty), a unique identifier for the menu
+# $2 - string, required (may be empty), the menu display text
+# $3 - string, required (may be empty), the path to the menu icon
+# $4 - string, required (may be empty), a shell command to be executed on selection of the menu
+# $5 - string, required (may be empty), the immediate child of the generated menu (normally, the XML string for an Openbox pipemenu, menu, or item)
+corgiObMenuImpl() {
+
+  menu="<menu"
+
+  id="$1"
+  label="$2"
+  icon="$3"
+  execute="$4"
+  content="$5"
+
+  if corgiHas "$id"
+  then
+    menu="$menu id=\"$id\""
+  fi
+
+  if corgiHas "$label"
+  then
+    menu="$menu label=\"$label\""
+  fi
+
+  if corgiHas "$icon"
+  then
+    menu="$menu icon=\"$icon\""
+  fi
+
+  if corgiHas "$execute"
+  then
+    menu="$menu execute=\"$execute\""
+  fi
+
+  menu="$menu>"
+
+  if corgiHas "$content"
+  then
+    menu="$menu$content"
+  fi
+
+  menu="$menu</menu>"
+
+  echo "$menu"
+  exit $?
+
+}
+
+
+# Generates and echoes an XML string for an Openbox menu item
+#
+# $1 - string, required (may be empty), the item display text
+# $2 - string, required (may be empty), the path to the item icon
+# $3 - string, required (may be empty), defines an action to be performed upon selection of the item (see http://openbox.org/wiki/Help:Actions for more documentation)
+# $4 - string, required (may be empty), a shell command to be executed on selection of the menu (provided only if "Execute" was provided for $3)
+# $5 - string, required (may be empty), a prompt to be displayed to the user, before executing a shell command
+corgiObMenuItemImpl() {
+
+  menuItem="<item"
+
+  label="$1"
+  icon="$2"
+  action="$3"
+  command="$4"
+  prompt="$5"
+
+  if corgiHas "$label"
+  then
+    menuItem="$menuItem label=\"$label\""
+  fi
+
+  if corgiHas "$icon"
+  then
+    menuItem="$menuItem icon=\"$icon\""
+  fi
+
+  menuItem="$menuItem>"
+
+  if corgiHas "$action"
+  then
+
+    menuItem="$menuItem<action name=\"$action\">"
+
+  if corgiHas "$prompt"
+    then
+      menuItem="$menuItem<prompt>$prompt</prompt>"
+    fi
+      
+    if corgiHas "$command" && [ "$action" = "Execute" ]
+    then
+      menuItem="$menuItem<command>$command</command>"
+    fi
+
+    menuItem="$menuItem</action>"
+
+  fi
+
+  menuItem="$menuItem</item>"
+
+  echo "$menuItem"
+  exit $?
+
+}
+
+
+# Generates and echoes an XML string for an Openbox menu separator
+#
+# $1 - string, required (may be empty), the separator label
+corgiObMenuSeparatorImpl() {
+
+  label="$1"
+
+  if corgiHas "$label"
+  then
+    echo "<separator label=\"$label\" />"
+  else 
+    echo "<separator />"
+  fi
+
+  exit $?
+
+}
+
+
+# Generates and echoes an XML string for an Openbox pipemenu
+# (This is a convenient wrapper function)
+#
+# Any arguments normally required by the wrapped implementation function
+# may now be omitted, if args being provided are provided 
+# as strings containing name:value pairs (i.e., "name:value", "name=value")
+#
+# See: #corgiObPipeMenuImpl()
+# See: corgi-scripts-core.shlib #corgiParseShellRequest
+#
+# Args (optional, and in any order):
+# "content:<VALUE>" - the immediate child of the pipemenu (normally, the XML string for an Openbox menu or item)
+corgiObPipeMenu() {
+  corgiParseShellRequest corgiObPipeMenuImpl "content" "$@"
+  exit $?
+}
+
+
+# Generates and echoes an XML string for an Openbox menu
+# (This is a convenient wrapper function)
+#
+# Any arguments normally required by the wrapped implementation function
+# may now be omitted, if args being provided are provided
+# as strings containing name:value pairs (i.e., "name:value", "name=value")
+#
+# See: #corgiObMenuImpl()
+# See: corgi-scripts-core.shlib #corgiParseShellRequest
+#
+# Args (optional, and in any order):
+# "id:<VALUE>" - a unique identifier for the menu
+# "label:<VALUE>" - the menu display text
+# "icon:<VALUE>" - the path to the menu icon
+# "execute:<VALUE>" - a shell command to be executed on selection of the menu
+# "content:<VALUE>" - the immediate child of the generated menu (normally, the XML string for an Openbox pipemenu, menu or item)
+corgiObMenu() {
+  corgiParseShellRequest corgiObMenuImpl "id,label,icon,execute,content" "$@"
+  exit $?
+}
+
+
+# Generates and echoes an XML string for an Openbox menu item
+# (This is a convenient wrapper function)
+#
+# Any arguments normally required by the wrapped implementation function
+# may now be omitted, if args being provided are provided
+# as strings containing name:value pairs (i.e., "name:value", "name=value")
+#
+# See: #corgiObMenuItemImpl()
+# See: corgi-scripts-core.shlib #corgiParseShellRequest
+#
+# Args (optional, and in any order):
+# "label:<VALUE>" - the item display text
+# "icon:<VALUE>" - the path to the item icon
+# "action:<VALUE>" - defines an action to be performed upon selection of the item (see http://openbox.org/wiki/Help:Actions for more documentation)
+# "command:<VALUE>" - a shell command to be executed on selection of the menu (provided only if "Execute" was provided for $3)
+# "prompt:<VALUE>" - a prompt to be displayed to the user, before executing a shell command
+corgiObMenuItem() {
+  corgiParseShellRequest corgiObMenuItemImpl "label,icon,action,command,prompt" "$@"
+  exit $?
+}
+
+
+# Generates and echoes an XML string for an Openbox menu separator
+# (This is a convenient wrapper function)
+#
+# Any arguments normally required by the wrapped implementation function
+# may now be omitted, if args being provided are provided
+# as strings containing name:value pairs (i.e., "name:value", "name=value")
+#
+# See: #corgiObMenuSeparatorImpl()
+# See: corgi-scripts-core.shlib #corgiParseShellRequest
+#
+# Args (optional, and in any order):
+# "label:<VALUE>" - the separator display text
+corgiObMenuSeparator() {
+  corgiParseShellRequest corgiObMenuSeparatorImpl "label" "$@"
+  exit $?
+}

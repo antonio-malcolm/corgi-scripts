@@ -1,0 +1,242 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#   
+# Corgi Scripts is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-displays-control - A utliity for adjusting screen backlight brightness in a simple and useful, yet configurable, manner.
+# Can be called directly from the command line, by other applications, or by ACPI (by adding entries in /etc/acpi/handler.sh)
+#
+# v2015.05.18
+#
+# Authored by Antonio Malcolm
+
+corgiUpdateScreenBrightness() {
+
+  # Set, utlimately, by the executed method's exit code 
+  # (usually, this is a call to echo, to update the backlight file)
+  # Assume failure, until proven otherwise
+  result=1
+
+
+  # Set this if you are not using intel_backlight
+  backlight="intel_backlight"
+
+
+  # Set this if the location of your backlight is not /sys/class/backlight
+  backlightPath="/sys/class/backlight"
+
+
+  # Set this if you want minimum brightness to be something other than zero
+  minBrightness=0
+
+
+  # Set this if you want more or fewer possible levels of brightness
+  steps=10
+
+
+  # Variables set from those defined above...
+
+  brightness="$backlightPath/$backlight/brightness"
+  currentBrightness=`cat $brightness`
+  maxBrightness=`cat $backlightPath/$backlight/max_brightness`
+  step=$(($maxBrightness/steps))
+
+
+  # CLI argument (string type)
+  # Expected values: down, up, arbitrary, off, min, low, less, half, more, high, max 
+  option="$1"
+
+
+  # CLI argument (int type)
+  # Expected values: any int between 0 and maximum available (see $maxBrightness variable setting) 
+  amount=$2
+
+
+  case "$option" in
+ 
+
+    # Decreases brightness
+    "down")
+   
+      nextStep=$(($currentBrightness - $step))
+  
+      if [ $nextStep -gt $minBrightness ]
+        then
+          echo $nextStep > $brightness
+        else
+          echo $minBrightness > $brightness
+      fi
+
+      result=$?     
+
+    ;;
+
+
+    # Increases brightness
+    "up")
+  
+      nextStep=$(($currentBrightness + $step))
+  
+      if [ $nextStep -lt $maxBrightness ]
+        then
+          echo $nextStep > $brightness
+        else
+          echo $maxBrightness > $brightness
+      fi
+
+      result=$?
+    
+    ;;
+
+
+    # Allows for arbitrary setting
+    "arbitrary") 
+
+      if [ $amount -ge 0 -a $amount -lt $maxBrightness ]
+        then
+          echo $amount > $brightness
+          result=$?
+        else
+          echo "ERROR (corgi-backlight-screen): arbitrary $amount is out of range of 0 to $maxBrightness"
+          logger "ERROR (corgi-backlight-screen): arbitrary $amount is out of range of 0 to $maxBrightness"        
+      fi
+
+    ;;
+
+
+    # Set brightness to ZERO
+    "off") 
+
+      echo 0 > $brightness 
+      result=$?
+  
+    ;;
+
+
+    # Brightness is set to maximum (see $minBrightness variable setting)
+    "min") 
+
+      echo $minBrightness > $brightness 
+      result=$?
+
+    ;;
+
+
+    # Set brightness to 25%
+    "low")
+
+      nextStep=$(($maxBrightness / 4))
+      echo $nextStep > $brightness
+      result=$?
+
+    ;;
+
+
+    # Set brightness to 30%
+    "less")
+
+      nextStep=$(($maxBrightness / 3))
+      echo $nextStep > $brightness
+      result=$?
+
+    ;;
+
+
+    # Set brightness to 50%
+    "half")
+
+      nextStep=$(($maxBrightness / 2))
+      echo $nextStep > $brightness
+      result=$?
+
+    ;;
+
+
+    # Set brightness to 60%
+    "more")
+
+      nextStep=$(($maxBrightness - ($maxBrightness / 3)))
+      echo $nextStep > $brightness
+      result=$?
+
+    ;;
+
+
+    # Set brightness to 75%
+    "high")
+
+      nextStep=$(($maxBrightness - ($maxBrightness / 4)))
+      echo $nextStep > $brightness
+      result=$?
+
+    ;;
+
+
+    # Set brightness to maximum (see $maxBrightness variable setting)
+    "max") 
+
+      echo $maxBrightness > $brightness 
+      result=$?
+
+    ;;
+
+    
+    # Display current brightness
+    "--get-current")
+
+      echo ""
+      echo "INFO (corgi-backlight-screen): current brightness is $maxBrightness"
+      echo ""
+      result=0
+
+    ;;
+
+  
+    # Display maximum available brightness
+    "--get-max")
+
+      echo ""
+      echo "INFO (corgi-backlight-screen): maximum available brightness is $maxBrightness" 
+      result=0
+      echo ""
+
+    ;;
+
+  
+    # Standard help response
+    *)
+
+      echo ""    
+      echo "corgi-backight-screen - accepts one of the following arguments:"
+      echo""
+      echo "help, --help, -h  (Displays this help dialog)"
+      echo "--get-max         (Displays a message with the maximum brightness available for your display)"
+      echo "down              (Decrease brightness by $((100 / $steps))%)"
+      echo "up                (Increase brightness by $((100 / $steps))%)"
+      echo "arbitrary         (Set brightness to the value provided as a second argument)"
+      echo "off               (Set brightness to zero)"
+      echo "min               (Set brightness to minimum (zero, by default - minimum variable can be edited in the script)"
+      echo "low               (Set brightness to 25% of maximum)"
+      echo "less              (Set brightness to 30% of maximum)"
+      echo "half              (Set brightness to 50% of maximum)"
+      echo "more              (Set brightness to 60% of maximum)"
+      echo "high              (Set brightness to 75% of maximum)"
+      echo "max               (Set brightness to maximum available (which, for YOUR built-in display, is $maxBrightness))"
+      echo ""
+
+      result=0
+
+    ;;
+
+  esac
+
+  exit "$result"
+
+}
+
+(corgiUpdateScreenBrightness "$@")
