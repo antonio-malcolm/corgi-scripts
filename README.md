@@ -48,9 +48,10 @@ Likewise, root permissions would be required to run the executable components, f
 Some scripts, particularly those which generate Openbox pipemenus, may use command utilities which require root permissions, 
 and it's much more simple to grant permissions to the individual corgi script than to each utility used by that script.
 
-With sudo installed, you would likely want to add the executables to the NOPASSWD list for your user, via visudo, like so:
+With sudo installed, you'd likely add the executables to the NOPASSWD list for your user, like so:
 
 ```
+$ visudo
 <username> ALL=(ALL) NOPASSWD: /usr/local/bin/corgi-openbox-menus-networkmanager
 ```
 
