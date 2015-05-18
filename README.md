@@ -33,7 +33,7 @@ OR:
 
 Copy the package components, manually, to their counterpart locations under /usr, /usr/local, ~/.usr,  
 or any directory with a subdirectory structure which matches that of the package.  
-(/usr, /usr/local, ~/.usr would be the most standard locations.)
+(/usr, /usr/local, and ~/.usr would be the most standard locations from which to choose.)
 
 
 OR:
