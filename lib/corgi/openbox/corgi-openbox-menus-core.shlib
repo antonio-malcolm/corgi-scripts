@@ -20,16 +20,16 @@
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
-corgiCoreMenuLib="$parentDirectory/lib/corgi/corgi-scripts-core.shlib"
+corgiCoreLib="$parentDirectory/lib/corgi/corgi-scripts-core.shlib"
 
-if [ ! -e "$corgiCoreMenuLib" ]
+if [ ! -e "$corgiCoreLib" ]
 then
   logger "ERROR (corgi-openbox-menus-core.shlib): The core Corgi library is not present. Exiting..."
   echo "ERROR (corgi-openbox-menus-core.shlib): The core Corgi library is not present. Exiting..."
   exit 1
 fi
 
-. "$corgiCoreMenuLib"
+. "$corgiCoreLib"
 
 # Generates and echoes an XML string for an Openbox pipemenu
 #
