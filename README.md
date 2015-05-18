@@ -7,7 +7,7 @@ Executables are located under *bin*
 Library functions (used by the executables) are located under *lib*  
 Static resources, such as icons, are located under *share*
 
-Screenshots of the Openbox pipemenus can be found under *[SCREENSHOTS/openbox](../SCREENSHOTS/openbox)*
+Screenshots of the Openbox pipemenus can be found under *[SCREENSHOTS/openbox](SCREENSHOTS/openbox)*
 
 Detailed install instructions are directly below this greeting.  
 If you're truly eager or lazy, skip to **[TL;DR](#tldr)**
