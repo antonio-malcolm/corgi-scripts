@@ -39,9 +39,6 @@ fi
 
 . "$corgiObMenuLib"
 
-pipeMenuContent=''
-pipeMenu=''
-
 hasNmConnectionEditor=false
 hasNotifySend=false
 hasZenity=false
