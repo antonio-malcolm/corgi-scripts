@@ -19,7 +19,7 @@ IDEALLY (and advised):
 Use the install script to copy the components, by default, to /usr/local:
 
 ```
-$ ./install.sh
+# ./install.sh
 ```
   
 You can set the install location using a single arg (with or without `--prefix`) like so:
