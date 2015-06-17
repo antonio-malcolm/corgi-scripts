@@ -4,9 +4,9 @@
 #
 # This file is part of Corgi Scripts.
 #   
-# Corgi Scripts is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
 
 # corgi-scripts-core.shlib - The core library of variables and functions for, and shared by, the corgi family of shell-based utilities.
 # These functions can also be used by any script which sources this file.
@@ -16,22 +16,60 @@
 # Authored by Antonio Malcolm
 
 
-# Convenience string for delimitation
-# (This makes dynamically building and parsing argument strings easier)
+# Convenience string for delimitation.
+# (This makes dynamically building and parsing argument strings easier.)
 corgiNewlineDelimiter='
 '
 
 
-# Convenience string, in the case we need an empty (NULL) value
-# (This makes dynamically building and parsing argument strings easier) 
-corgiNoBone='.'
+# Convenience string, in the case we need an empty (NULL) value.
+# (This makes dynamically building and parsing argument strings easier.) 
+corgiNoBone='_CORGI-NO-BONE_'
 
-# Echos the nth arg from an array of args.
+
+# Returns one or zero, based on whether or not an arg is zero length,
+# or, if the arg is a command, whether or not the command is available to the system, 
+# (or Corgi's "empty indicator" string, which can be used in case one needs 
+# to "indicate" an empty value, but can't use an actual empty value)
+# 0 indicates the arg is not zero length, and does not match Corgi's indicator string.
+# 1 indicates the arg is either empty or matches Corgi's indicator string.
+#
+# $1 - value, required, to be checked for emptiness
+corgiHasArg() {
+
+  if [ ! -z "$1" -a "$1" != "$corgiNoBone" ]
+  then
+    return 0
+  fi
+
+  return 1
+
+}
+
+
+# Returns one or zero, based on whether or not a command is available to the system.
+# 0 indicates the command is available.
+# 1 indicates the command is not available.
+#
+# $1 - value, required, to be checked for availability
+corgiHasCommand() {
+
+  if command -v $1 > /dev/null
+  then
+    return 0
+  fi
+
+  return 1
+
+}
+
+
+# Echoes the nth arg from an array of args.
 # A positive number obtains from the head, a negative number obtains from the tail.
 #
 # $1 - number, required, the position of the desired arg in the arg array, from head (positive), or tail (negative)
 # $2 - arg array, required, from which we are obtaining the desired arg
-corgiGetNthArg() {
+corgiFetchNthArg() {
 
   idx=$1
 
@@ -45,66 +83,238 @@ corgiGetNthArg() {
   fi
 
   echo "$1"
+  exit $?
 
 }
 
 
-# Returns one or zero, based on whether or not the first arg is prefixed by the second arg
-# (This is useful for simple, "one-off", if statements... for anyhting more complex,
-# it would likely be cleaner/more readable to use a case block.)
+
+# Echoes a result string, from the provided string, which consists of all characters which occur 
+# before the first or last occurence of the specified appending substring.
+# (Defaults to last occurrence of the appending substring.)
 #
-# $1 - value, required, to be checked for whether or not it is prefixed by the second arg
-# $2 - value, required, to be checked for whether or not it is a prefix of the first arg
-corgiStartsWith() {
+# $1 - string, required, the full string, from which the result string is produced
+# $2 - string, required, the appending substring, from before which we produce the result string
+# $3 - string, optional, determines from where the result string is produced -
+#      options are "first" (from before the occurrence of the appending substring closest to the head of the string) 
+#      and "last" (from before the occurrence of the appending substring closest to the tail of the string
+#      (an incorrect option, or the absence of an option, will result in "last" being assumed)
+corgiFetchSubstringBefore() {
 
-  case "$1" in
-    "$2"*) return 0 ;;
-    *) return 1 ;;
-  esac
+  substring=''
 
-}
+  fullString="$1"
+  delimiter="$2"
+  orientation="$3"
 
-
-# Returns one or zero, based on whether or not the first arg is appended by the second arg
-# (This is useful for simple, "one-off", if statements... for anyhting more complex,
-# it would likely be cleaner/more readable to use a case block.)
-#
-# $1 - value, required, to be checked for whether or not it is appended by the second arg
-# $2 - value, required, to be checked for whether or not it is an appendix of the first arg
-corgiEndsWith() {
-
-  case "$1" in
-    *"$2") return 0 ;;
-    *) return 1 ;;
-  esac
-
-}
-
-
-# Returns one or zero, based on whether or not an arg is zero length 
-# (or Corgi's "empty indicator" string, which can be used in case one needs 
-# to "indicate" an empty value, but can't use an actual empty value)
-# 0 indicates true (string is not zero length, and does not match Corgi's indicator string).
-# 1 indicates false (string is either empty or matches Corgi's indicator string)
-#
-# $1 - value, required, to be checked for emptiness
-corgiHas() {
-
-  if [ ! -z "$1" -a "$1" != "$corgiNoBone" ]
+  if [ "$orientation" = 'first' ]
   then
-    return 0
+    substring="${fullString%%"$delimiter"*}"
+  else
+    substring="${fullString%"$delimiter"*}"  
   fi
+
+  echo "$substring"
+  exit 0
+
+}
+
+
+# Echoes a result string, from the provided string, which consists of all characters which occur 
+# after the first or last occurence of the specified prepending substring.
+# (Defaults to last occurrence of the prepending substring.)
+#
+# $1 - string, required, the full string, from which the result string is produced
+# $2 - string, required, the prepending substring, from after which we produce the result string
+# $3 - string, optional, determines from where the result string is produced -
+#      options are "first" (from after the occurrence of the prepending substring closest to the head of the string) 
+#      and "last" (from after the occurrence of the prepending substring closest to the tail of the string
+#      (an incorrect option, or the absence of an option, will result in "last" being assumed)
+corgiFetchSubstringAfter() {
+
+  substring=''
+
+  fullString="$1"
+  delimiter="$2"
+  orientation="$3"
+
+  if [ "$orientation" = 'first' ]
+  then
+    substring="${fullString#*"$delimiter"}"
+  else
+    substring="${fullString##*"$delimiter"}"
+  fi
+
+  echo "$substring"
+  exit 0
+
+}
+
+
+# Echoes a result string, from the provided string, which consists of all characters which occur between the 
+# innermost or outermost occurrence of the prepending and appending substrings, or,
+# from the occurence closest to the head, or from the occurrence closest to the tail.
+# (Defaults to the outermost occurrence of the prepending and appending substrings.)
+#
+# $1 - string, required, the full string, from which the result string is produced
+# $2 - string, required, the prepending substring, from after which we produce the result string
+# $3 - string, required, the appending substring, from before which we produce the result string
+# $4 - string, optional, determines from where the result string is produced -
+#      options are "inner" (from between the innermost occurrence of the prepending and appending substrings), 
+#      "outer" (from between the outermost occurrence of the prepending and appending substrings), 
+#      "first" (from between the occurrence of the prepending and appending substrings closest to the head of the string), 
+#      or "last" (from between the occurrence of the prepending and appending substrings closest to the tail of the string) - 
+#      defaults to "outer"
+#      (an incorrect option, or the absence of an option, will result in "outer" being assumed)
+corgiFetchSubstringBetween() {
+
+  substring=''
+
+  fullString="$1"
+  prependingDelimiter="$2"
+  appendingDelimiter="$3"
+  orientation="$4"
+
+  if [ -z "$appendingDelimiter" ]
+  then
+    appendingDelimiter="$prependingDelimiter"
+  fi
+
+  case "$orientation" in
+
+    'inner') 
+      substring="${fullString##*"$prependingDelimiter"}"
+      substring="${substring%%"$appendingDelimiter"*}"
+    ;;
+
+    'first') 
+      substring="`corgiFetchSubstringAfter "$fullString" "$prependingDelimiter" 'first'`"
+      substring="`corgiFetchSubstringBefore "$substring" "$appendingDelimiter" 'first'`"
+    ;;
+
+    'last') 
+      substring="`corgiFetchSubstringAfter "$fullString" "$prependingDelimiter" 'last'`"
+      substring="`corgiFetchSubstringBefore "$substring" "$appendingDelimiter" 'first'`"
+    ;;
+
+    *)
+      substring="${fullString#*"$prependingDelimiter"}"
+      substring="${substring%"$appendingDelimiter"*}"
+    ;;
+
+  esac
+
+  echo "$substring"
+  exit 0
+
+}
+
+
+# Returns one or zero, based on whether or not the first arg contains the second arg.
+# (This is useful for simple, "one-off", if statements... for anything more complex,
+# it would likely be cleaner/more readable to use a case block.)
+#
+# $1 - value, required, to be checked for whether or not it contains the second arg
+# $2 - value, required, to be checked for whether or not it is a substring of the first arg
+corgiHasSubstring() {
+
+  case "$1" in
+    *"$2"*) return 0 ;;
+  esac
 
   return 1
 
 }
 
 
-# Echos a semi-unique string, based on the date in nanoseconds.
+# Returns one or zero, based on whether or not the first arg is prefixed by the second arg.
+# (This is useful for simple, "one-off", if statements... for anything more complex,
+# it would likely be cleaner/more readable to use a case block.)
+#
+# $1 - value, required, to be checked for whether or not it is prefixed by the second arg
+# $2 - value, required, to be checked for whether or not it is a prefix of the first arg
+corgiStartsWithSubstring() {
+
+  case "$1" in
+    "$2"*) return 0 ;;
+  esac
+
+  return 1
+
+}
+
+
+# Returns one or zero, based on whether or not the first arg is appended by the second arg.
+# (This is useful for simple, "one-off", if statements... for anything more complex,
+# it would likely be cleaner/more readable to use a case block.)
+#
+# $1 - value, required, to be checked for whether or not it is appended by the second arg
+# $2 - value, required, to be checked for whether or not it is an appendix of the first arg
+corgiEndsWithSubstring() {
+
+  case "$1" in
+    *"$2") return 0 ;;
+  esac
+
+  return 1
+
+}
+
+# Removes all occurrences of the specified substring from the specified string
+# and echoes the result.
+#
+# $1 - string, required, from which all occurrences of the substring should be removed
+# $2 - string, required, substring for which all occurrences will be removed
+corgiRemoveAllOccurrencesOfSubstring() {
+
+  resultString=''
+
+  fullString="$1"
+  substring="$2"
+
+  while corgiHasSubstring "$fullString" "$substring"  
+  do
+    resultString="$resultString`corgiFetchSubstringBefore "$fullString" "$substring" 'first'`"
+    fullString="`corgiFetchSubstringAfter "$fullString" "$substring" 'first'`"
+  done
+
+  echo "$resultString$fullString"
+  exit $?
+
+}
+
+
+# Replaces all occurrences of the specified substring found in the specified string
+# and echoes the result.
+#
+# $1 - string, required, for which all occurrences of the substring should be replaced
+# $2 - string, required, substring for which all occurrences will be replaced
+# $3 - string, required, replacement substring
+corgiReplaceAllOccurrencesOfSubstring() {
+
+  resultString=''
+
+  currentString="$1"
+  currentSubstring="$2"
+  replacementSubstring="$3"
+
+  while corgiHasSubstring "$currentString" "$currentSubstring"  
+  do
+    resultString="$resultString`corgiFetchSubstringBefore "$currentString" "$currentSubstring" 'first'`$replacementSubstring"
+    currentString="`corgiFetchSubstringAfter "$currentString" "$currentSubstring" 'first'`"
+  done
+
+  echo "$resultString$currentString"
+  exit $?
+
+}
+
+
+# Echoes a semi-unique string, based on the date in nanoseconds.
 # An arg can be provided as a prefix to be added to the head of the string.
 # If none is provided, this function provides a default.
 #
-# $1 - string, optional, a prefix with which prepend the id
+# $1 - string, optional, a prefix with which to prepend the id
 corgiMakeIdString() {
 
   prefix="corgi-id-"
@@ -115,86 +325,82 @@ corgiMakeIdString() {
   fi
 
   echo "$prefix`date +%N`"
+  exit $?
 
 }
 
 
 # Adds characters to the head or tail of a string, 
-# until reaches the desired length, and echos the result.
+# until reaches the desired length, 
+# and echos the result.
 #
 # $1 - string, required, to be padded with characters
 # $2 - string, required, character(s) to be used for padding
 # $3 - number, required, the desired length of the resulting, padded, string
-# $4 - string, optional, "after" (add to tail), or "before" (add to head), defaults to "after"
-corgiMakePaddedString() {
+# $4 - string, optional, determines where the string will be padded -
+#      options are "after" (add to tail), or "before" (add to head) - defaults to "after"
+corgiPadString() {
 
   padding=''
 
   string="$1"
   pad="$2"
   length=$3
-  placement='after'
+  placement="$4"
 
   if [ ${#string} -lt $length ]
   then
 
     amount=$(($length - ${#string}))
 
-    if [ $# -gt 3 -a "$4" = 'before' ]
-    then
-      placement="$4"
-    fi
-
     for idx in `seq 1 $amount`
     do
       padding="$padding$pad"
     done
 
-    if [ "$placement" = 'after' ]
+    if [ "$placement" = 'before' ]
     then
-      string="$string$padding"
-    else
       string="$padding$string"
+    else
+      string="$string$padding"
     fi
 
   fi
 
   echo "$string"
+  exit 0
 
 }
 
 
 # Removes characters from the head or tail of a string, 
-# until it reaches the desired length, and echos the result.
+# until it reaches the desired length, 
+# and echos the result.
 #
 #
 # $1 - string, required, to be trimmed
-# $3 - number, required, the desired length of the resulting, trimmed, string
-# $4 - string, optional, "after" (remove from tail), or "before" (remove from head), defaults to "after"
+# $3 - number, optional, the desired length of the resulting, trimmed, string
+# $4 - string, optional, determines from where the string will be trimmed - 
+#      options are "after" (remove from tail), or "before" (remove from head) - defaults to "after"
 corgiTrimString() {
 
-  length=$1
-  string="$2"
-  placement='after'  
+  string="$1"
+  length=$2
+  placement="$3"  
 
   if [ ${#string} -gt $length ]
   then
-
-    if [ $# -gt 2 -a "$3" = 'before' ]
-    then
-      placement="$3"
-    fi
 
     numberOfCharacters=$((${#string - $length}))
 
     for idx in `seq 1 $numberOfCharacters`
     do
    
-      if [ "$placement" = 'after' ]
+      if [ "$placement" = 'before' ]
       then
-        string="${string%?}"
-      else
         string="${string#?}"
+      else
+        string="${string%?}"
       fi
   
     done
@@ -202,6 +408,201 @@ corgiTrimString() {
   fi
 
   echo "$string"
+  exit 0
+
+}
+
+
+# Removes whitespace from the head of a string
+# and echoes the result.
+#
+#
+# $1 - string, required, to be trimmed
+corgiTrimWhiteSpaceBefore() {
+
+  resultString="$1"
+
+  while corgiEndsWithSubstring "$resultString" ' '
+  do
+    resultString="`corgiFetchSubstringBefore "$resultString" ' '`"
+  done
+
+  echo "$resultString"
+  exit 0
+
+}
+
+
+# Removes whitespace from the tail of a string
+# and echoes the result.
+#
+#
+# $1 - string, required, to be trimmed
+corgiTrimWhiteSpaceAfter() {
+
+  resultString="$1"
+
+  while corgiStartsWithSubstring "$resultString" ' '
+  do
+    resultString="`corgiFetchSubstringAfter "$resultString" ' ' 'first'`"
+  done
+
+  echo "$resultString"
+  exit 0
+
+}
+
+
+# Removes whitespace from the head and/or tail of a string
+# and echoes the result.
+#
+#
+# $1 - string, required, to be trimmed
+# $4 - string, optional, determines from where white space will be removed -
+#      options are "both" (remove from both head and tail), "after" (remove from tail), 
+#      or "before" (remove from head) - defaults to "both" 
+#      (an incorrect option, or the absence of an option,
+#      will result in "both" being assumed)
+corgiTrimWhiteSpace() {
+
+  resultString="$1"
+  placement="$2"  
+
+  case "$placement" in
+
+    'after') resultString="`corgiTrimWhiteSpaceAfter "$resultString"`" ;;
+    'before') resultString="`corgiTrimWhiteSpaceBefore "$resultString"`" ;;
+
+    *)
+      resultString="`corgiTrimWhiteSpaceAfter "$resultString"`" 
+      resultString="`corgiTrimWhiteSpaceBefore "$resultString"`"
+    ;;
+
+  esac
+
+  echo "$resultString"
+  exit 0
+
+}
+
+
+# Parses the output of command '# id' (provided by the caller),
+# in order to generate and echo a string which describes the current user.
+# The result string may consist of the current user's id, 
+# name, primary group id or primary group name. 
+# Or, the result string may consist of all- the current user's id, 
+# name, primary group id, primary group name, pipe-delimited.
+#
+# $1 - string, optional, determines which user description, or all, will be echoed -
+#      options are "id" (user id), "name" (user name), "gid" (primary group id), 
+#      "group" (primary group name), or "all" - defaults to "all" 
+#      (an incorrect option, or the absence of an option,
+#      will result in "all" being assumed)
+corgiParseCurrentUserInfo() {
+
+  result=''
+
+  dataType="$1"
+  userData="$2"
+  groupData="$3"
+
+  case "$dataType" in
+
+    'id') 
+      result="`corgiFetchSubstringBetween "$userData" 'uid=' '('`" 
+    ;;
+
+    'name') 
+      uid="`corgiFetchSubstringBetween "$userData" 'uid=' '('`"
+      result="`corgiFetchSubstringBetween "$userData" "uid=$uid(" ')'`"
+    ;;
+
+    'gid') 
+      result="`corgiFetchSubstringBetween "$groupData" 'gid=' '('`"
+    ;;
+
+    'group') 
+      gid="`corgiFetchSubstringBetween "$groupData" 'gid=' '('`"
+      result="`corgiFetchSubstringBetween "$groupData" "gid=$gid(" ')'`"
+    ;;
+
+    *) result="`corgiParseCurrentUserInfo 'id'`|`corgiParseCurrentUserInfo 'name'`|`corgiParseCurrentUserInfo 'gid'`|`corgiParseCurrentUserInfo 'group'`" ;;
+
+  esac
+
+  echo "$result"
+  exit $?
+
+}
+
+
+# Echoes a string describing the current user. 
+# The result string may consist of the current user's id, 
+# name, primary group id or primary group name. 
+# Or, the result string may consist of all- the current user's id, 
+# name, primary group id, primary group name, pipe-delimited.
+#
+# $1 - string, optional, determines which user description, or all, will be echoed -
+#      options are "id" (user id), "name" (user name), "gid" (primary group id), 
+#      "group" (primary group name), or "all" - defaults to "all" -
+#      (an incorrect option, or the absence of an option,
+#      will result in "all" being assumed)
+corgiFetchCurrentUserInfo() {
+
+  userInfo="`id`"
+
+  dataType="$1"
+
+  userInfo="`corgiParseCurrentUserInfo "$dataType" $userInfo`"
+
+  echo "$userInfo"
+  exit $?
+
+}
+
+
+# Returns one or zero, based on whether or not the directory at the specified path is 
+# populated with files and/or subdirectories.
+#
+# $1 - string, required, the directory path to be checked for whether or not it 
+# contains files and/or subdirecotries
+corgiDirectoryIsPopulated() {
+
+  if [ -d "$1" ]
+  then
+
+    pathInfo="`ls "$1"`"
+
+    if [ ! -z "$pathInfo" ]
+    then
+      return 0  
+    fi
+ 
+  fi
+
+  return 1
+
+}
+
+
+# Returns one or zero, based on whether or not the directory at the specified path is 
+# the active mount point for a volume.
+#
+# $1 - value, required, the directory path to be checked for whether or not it is 
+# the active mount point for a volume
+corgiMountPointHasMount() {
+
+  if [ -d "$1" ]
+  then
+
+    if grep -qs "$1" /proc/mounts 
+    then
+      return 0      
+    fi
+
+  fi
+
+  return 1
 
 }
 
@@ -250,7 +651,7 @@ corgiTrimString() {
 #
 # $1 - function, callback, the function or utility call being wrapped
 # $2 - string, argument names, comma-delimited, should match the names present in the name-value pairs provided to the function's wrapper function,
-#      and be provided in the order respective to the arguments expected by the wrapped callback function (i.e., "name1,name2,name3", to match callback --option $arg1 $arg2 $arg3)
+#      and be provided in the order respective to the arguments expected by the wrapped callback function (i.e., "name1,name2,name3", to match callback -ption $arg1 $arg2 $arg3)
 corgiParseShellRequestImpl() {
 
   callbackArgs=''
@@ -281,11 +682,11 @@ corgiParseShellRequestImpl() {
           argId="$argId1"
 
           case "$arg" in
-            $argId2*) argId="$argId2" ;;
-            $argId3*) argId="$argId3" ;;
+            "$argId2"*) argId="$argId2" ;;
+            "$argId3"*) argId="$argId3" ;;
           esac
 
-          argValue="${arg#*$argId}"
+          argValue="${arg#*"$argId"}"
 
           if [ ! -z "$argValue" ]
           then

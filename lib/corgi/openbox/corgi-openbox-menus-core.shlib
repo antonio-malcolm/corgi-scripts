@@ -4,9 +4,9 @@
 #
 # This file is part of Corgi Scripts.
 #   
-# Corgi Scripts is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
 
 # corgi-openbox-menus-core.shlib - The core library of functions for, and shared by, Corgi shell-based utilites used to generate Openbox pipemenus.
 # These functions can also be used by any script which sources this file.
@@ -31,6 +31,7 @@ fi
 
 . "$corgiCoreLib"
 
+
 # Generates and echoes an XML string for an Openbox pipemenu
 #
 # $1 - string, required (may be empty), the immediate child of the pipemenu (normally, the XML string for an Openbox menu or item)
@@ -38,7 +39,7 @@ corgiObPipeMenuImpl() {
 
   content="$1"
 
-  if corgiHas "$content"
+  if corgiHasArg "$content"
   then
     echo "<openbox_pipe_menu>$content</openbox_pipe_menu>"
   else
@@ -67,29 +68,29 @@ corgiObMenuImpl() {
   execute="$4"
   content="$5"
 
-  if corgiHas "$id"
+  if corgiHasArg "$id"
   then
     menu="$menu id=\"$id\""
   fi
 
-  if corgiHas "$label"
+  if corgiHasArg "$label"
   then
     menu="$menu label=\"$label\""
   fi
 
-  if corgiHas "$icon"
+  if corgiHasArg "$icon"
   then
     menu="$menu icon=\"$icon\""
   fi
 
-  if corgiHas "$execute"
+  if corgiHasArg "$execute"
   then
     menu="$menu execute=\"$execute\""
   fi
 
   menu="$menu>"
 
-  if corgiHas "$content"
+  if corgiHasArg "$content"
   then
     menu="$menu$content"
   fi
@@ -119,29 +120,29 @@ corgiObMenuItemImpl() {
   command="$4"
   prompt="$5"
 
-  if corgiHas "$label"
+  if corgiHasArg "$label"
   then
     menuItem="$menuItem label=\"$label\""
   fi
 
-  if corgiHas "$icon"
+  if corgiHasArg "$icon"
   then
     menuItem="$menuItem icon=\"$icon\""
   fi
 
   menuItem="$menuItem>"
 
-  if corgiHas "$action"
+  if corgiHasArg "$action"
   then
 
     menuItem="$menuItem<action name=\"$action\">"
 
-  if corgiHas "$prompt"
+  if corgiHasArg "$prompt"
     then
       menuItem="$menuItem<prompt>$prompt</prompt>"
     fi
       
-    if corgiHas "$command" && [ "$action" = "Execute" ]
+    if corgiHasArg "$command" && [ "$action" = "Execute" ]
     then
       menuItem="$menuItem<command>$command</command>"
     fi
@@ -165,7 +166,7 @@ corgiObMenuSeparatorImpl() {
 
   label="$1"
 
-  if corgiHas "$label"
+  if corgiHasArg "$label"
   then
     echo "<separator label=\"$label\" />"
   else 
@@ -254,4 +255,29 @@ corgiObMenuItem() {
 corgiObMenuSeparator() {
   corgiParseShellRequest corgiObMenuSeparatorImpl "label" "$@"
   exit $?
+}
+
+# Escapes and echoes a string containing underscores,
+# by converting the first underscore it encounters to a
+# two underscores, per openbox' documentation.
+#
+# $1 - string, required, to be checked for the presence of underscores, and, 
+#      if underscores are found, to be escaped before echo
+corgiObEscapeUnderscores() {
+
+  resultString="$1"
+
+  if corgiHasSubstring "$resultString" '_'
+  then
+
+    prefix="`corgiFetchSubstringBefore "$resultString" '_' 'first'`"
+    appendix="`corgiFetchSubstringAfter "$resultString" '_' 'first'`"
+
+    resultString="$prefix"'__'"$appendix"
+
+  fi
+
+  echo "$resultString"
+  exit $?
+
 }

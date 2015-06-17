@@ -4,9 +4,9 @@
 #
 # This file is part of Corgi Scripts.
 #   
-# Corgi Scripts is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
 
 # This is a convenient install script for the Corgi Scripts library.
 # By default, it installs components from the corgi-scripts package subdirectories to their counterparts under /usr/local
@@ -53,7 +53,7 @@ fi
 if mkdir -p "/$prefix/share/icons"
 then
   
-  if cp -pr "$currentDirectory/share/icons/corgi/" "$prefix/share/icons/"
+  if cp -r "$currentDirectory/share/icons/corgi/" "$prefix/share/icons/"
   then
     echo "SUCCESS (corgi-scripts/install.sh): Installed static assets under $prefix/share/icons/corgi/"
   else
@@ -63,7 +63,7 @@ then
   if mkdir -p "$prefix/lib"
   then
     
-    if cp -pr "$currentDirectory/lib/corgi/" "$prefix/lib/"
+    if cp -r "$currentDirectory/lib/corgi/" "$prefix/lib/"
     then
       echo "SUCCESS (corgi-scripts/install.sh): Installed script libraries under $prefix/lib/corgi/"
     else
@@ -73,7 +73,7 @@ then
     if mkdir -p "$prefix/bin"
     then
 
-      if cp -pr "$currentDirectory/bin/"* "$prefix/bin/"
+      if cp -r "$currentDirectory/bin/"* "$prefix/bin/"
       then
         echo "SUCCESS (corgi-scripts/install.sh): Installed executable scripts under $prefix/bin/"
       else

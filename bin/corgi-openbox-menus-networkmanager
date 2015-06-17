@@ -4,9 +4,9 @@
 #
 # This file is part of Corgi Scripts.
 #   
-# Corgi Scripts is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
 
 # corgi-openbox-menus-networkmanager - Generates an Openbox Pipemenu for managing network devices and connections, using NetworkManager as a backend.
 #
@@ -17,7 +17,6 @@
 # Requires: corgi-openbox-menus-networkmanager.shlib
 # Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-networkmanager.shlib)
 # Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-networkmanager.shlib)
-# Requires: NetworkManager
 
 exitStatus=1
 currentDirectory="`dirname "$0"`"
@@ -27,8 +26,8 @@ corgiObMenusNmLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-
 
 if [ ! -e "$corgiObMenusNmLib" ]
 then
-  logger "ERROR (corgi-openbox-menu-networkmanager): The Corgi Openbox NetworkManager Menu library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menu-networkmanager): The Corgi Openbox NetworkManager Menu library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-networkmanager): The Corgi Openbox NetworkManager Menu library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-networkmanager): The Corgi Openbox NetworkManager Menu library is not present. Exiting..."
   exit $exitStatus
 fi
 
@@ -37,18 +36,17 @@ fi
 pipeMenu=''
 pipeMenuContent=''
 
-if ! command -v nmcli > /dev/null
-then
-  logger "ERROR (corgi-openbox-menu-networkmanager): NetowrkManager CLI not found. Please install NetworkManager"
-  pipeMenuContent=`corgiObMenuItem "label:This requires NetworkManager..."`
-else
+connectionStatusAll="`getNetworkHardwareStatus`"
+connectionStatusWifi="`getWirelessHardwareStatus`"
 
-  connectionStatusAll="`nmcli networking`"
-  connectionStatusWifi="`nmcli radio wifi`"
+if [ "$connectionStatusAll" = "$corgiNoBone" -o "$connectionStatusWifi" = "$corgiNoBone" ]
+then
+  pipeMenuContent="`corgiObMenuItem "label:This requires the NetworkManager package."`"
+else
 
   if [ -z "$connectionStatusAll" ]
   then
-    pipeMenuContent="`corgiObMenuItem "label:Can't obtain network connection status!"`"
+    pipeMenuContent="`corgiObMenuItem "label:Can't get the network hardware status!"`"
   else
 
     shouldAppendConnectionProfiles=false
@@ -66,7 +64,7 @@ else
 
       if [ -z "$connectionStatusWifi" ]
       then
-        pipeMenuContent="$pipeMenuContent`corgiMenuObItem "label:Can't obtain wireless status!"`"
+        pipeMenuContent="$pipeMenuContent`corgiMenuObItem "label:Can't get the wireless hardware status!"`"
       elif [ "$connectionStatusWifi" = 'disabled' ]
       then
         toggleWifiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib\" ; toggleWifiState on'"
@@ -101,8 +99,12 @@ else
       wifiMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib&quot; ; buildWifiNetworksMenu &quot;hidden&quot;'"
       pipeMenuContent="$pipeMenuContent`corgiObMenu "id:$menuId" "label:Wireless Networks (Hidden)" "execute:$wifiMenuCommand"`"
 
-      connectToHiddenCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib\" ; connectToAuthenticatedHiddenWifiNetwork'"
-      connectToHiddenWifiItem="`corgiObMenuItem "label:Connect To A Hidden Wireless Network" "action:Execute" "command:$connectToHiddenCommand"`"
+      connectToWifiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib\" ; connectToWifiNetwork'"
+      connectToWifiItem="`corgiObMenuItem "label:Add a Wireless Network" "action:Execute" "command:$connectToWifiCommand"`"
+      pipeMenuContent="$pipeMenuContent$wifiNetworkMenus$connectToWifiItem"
+
+      connectToHiddenWifiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib\" ; connectToWifiNetwork \"\" \"\" true'"
+      connectToHiddenWifiItem="`corgiObMenuItem "label:Add a Hidden Wireless Network" "action:Execute" "command:$connectToHiddenWifiCommand"`"
       pipeMenuContent="$pipeMenuContent$wifiNetworkMenus$connectToHiddenWifiItem"
 
     fi
@@ -116,8 +118,8 @@ exitStatus=$?
 
 if [ -z "$pipeMenu" ]
 then
-  logger "ERROR (corgi-openbox-menu-networkmanager): Unable to generate pipe menu. Exiting..."
-  echo "ERROR (corgi-openbox-menu-networkmanager): Unable to generate pipe menu. Exiting..."
+  logger "ERROR (corgi-openbox-menus-networkmanager): Unable to generate pipe menu. Exiting..."
+  echo "ERROR (corgi-openbox-menus-networkmanager): Unable to generate pipe menu. Exiting..."
 else
   echo "$pipeMenu"
 fi

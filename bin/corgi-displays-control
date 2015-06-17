@@ -4,9 +4,9 @@
 #
 # This file is part of Corgi Scripts.
 #   
-# Corgi Scripts is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
 
 # corgi-displays-control - A utliity for adjusting screen backlight brightness in a simple and useful, yet configurable, manner.
 # Can be called directly from the command line, by other applications, or by ACPI (by adding entries in /etc/acpi/handler.sh)
