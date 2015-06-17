@@ -1,0 +1,1367 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-samba.shlib - Functions used to generate Openbox menus and items for describing and managing a samba server, as well as connections, as a client, 
+# to other samba shares, using samba, smbclient, and udevil as backends. In the absence of udevil, this library will attempt to use mount and umount- both with and without passwordless sudo.
+#
+# v2015.05.22
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-openbox-menus-core.shlib
+# Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
+# Requires: smbclient - if we want to find and connect to samba shares
+# Requires: cifs-utils - if we want to mount samba shares
+# Requires: udevil - if we want to mount samba shares (allows us to mount without sudo)
+# Requires: zenity - if we plan on connecting to authenticated samba shares - used for entering addresses and passwords,
+#                    as well as confirmation and error prompts, as well as notifications, in the absence of notify-send
+# Optional: libnotify - used for informational and success notifications
+
+
+exitStatus=1
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
+
+if [ ! -e "$corgiObMenuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-samba.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-samba.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  exit $exitStatus
+fi
+
+. "$corgiObMenuLib"
+
+hasSmbclient=false
+hasCifs=false
+hasUdevil=false
+hasZenity=false
+hasNotify=false
+
+if ! command -v smbclient > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-samba.shlib): smbclient not found. Please install smbclient or the Samba package"
+else 
+  hasSmbclient=true
+fi
+
+if ! command -v mount.cifs > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-samba.shlib): mount.cifs not found. We will be unable to mount Samba shares.Please install cifs-utils"
+else
+  hasCifs=true
+fi
+
+if ! command -v udevil > /dev/null
+then
+  logger "WARN (corgi-openbox-menus-samba.shlib): udevil not found. We will attempt to mount Samba shares via mount, which requires passwordless sudo. Please install udevil or add mount and umount to the NOPASSWD list for your sudoer."
+else
+  hasUdevil=true
+fi
+
+if ! command -v zenity > /dev/null
+then
+  logger "WARN (corgi-openbox-menus-samba.shlib): zenity not found. We can't connect to secured samba shares or set custom mount points without it. Please install zenity."
+else
+  hasZenity=true
+fi
+
+if ! command -v notify-send > /dev/null
+then
+  logger "INFO (corgi-openbox-menus-samba.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
+else
+  hasNotify=true  
+fi
+
+
+# Prompts the user with a dialog, in which they can provide the IP address and share name to mount a Samba share.
+#
+# $1 - function, required, a callback to be invoked after the user has provided their Samba share address data
+# $2 - true or false, required, describes whether or not the Samba share should be moutned as read-only
+# $3 - number, optional, a number to match a type of error, in the case this function is called following
+#      an encountered error - 
+#      options are 1 (the user failed to provide an IP address for the Samba server to which they are attempting to connect),
+#      2 (the user provided an IP address and an available Samba server using that address could not be found),
+#      3 (the user failed to provide a name for the Samba share which they are attempting to mount),
+#      4 (the user provided a share name and an available Samba share using that name could not be found)
+# $4 - string, optional, the previously supplied and attempted Samba server IP address, used for informational
+#      purposes, in the case an error is encountered
+# $5 - string, optional, the previously supplied and attempted Samba share name, used for informational
+#      purposes, in the case an error is encountered  
+promptUserForSambaShareAddress() {
+
+  dialogTitle="Samba - Host And Share Info"
+  dialogText="Enter the Samba host IP address and share name."
+
+  callback=$1
+  mountAsReadOnly=$2
+  errorCode=$3
+  suppliedHostDescriptor="$4"
+  suppliedShareName="$5"
+
+  case $errorCode in
+
+    1) 
+      dialogTitle="Samba - Host Address Missing"
+      dialogText="`echo "Host address is missing.\n$dialogText"`"
+    ;;
+
+    2) 
+      dialogTitle="Samba - Host Address Incorrect"
+      dialogText="`echo "Host address '$suppliedHostDescriptor' is incorrect or unreachable.\n$dialogText"`"
+    ;;
+
+    3) 
+      dialogTitle="Samba - Share Name Missing"
+      dialogText="`echo "Share name is missing.\n$dialogText"`"
+    ;;
+
+    4) 
+      dialogTitle="Samba - Share Name Incorrect"
+      dialogText="`echo "Share name '$suppliedShareName' is incorrect or unavailable.\n$dialogText"`"
+    ;;
+
+  esac
+
+  zenity --forms --title="$dialogTitle" --text="$dialogText" --add-entry="Host IP Address:" --add-entry="Share Name:" | {
+
+    response='_ZENITY-CANCEL-VALUE_'
+
+    while read -r line
+    do
+
+      # Sometimes, Gtk throws warnings to pester developers about using their APIs.
+      # This results in garbage that users of those developers' products
+      # must deal with, so we must filter it out, here...
+      if ! corgiStartsWithSubstring "$line" 'Gtk-Message'
+      then
+        response="$line"
+        break
+      fi
+
+    done
+
+    if [ "$response" = '_ZENITY-CANCEL-VALUE_' ]
+    then
+      exit 0
+    else
+ 
+      if [ -z "$response" ]
+      then
+        promptUserForSambaShareAddress $callback $mountAsReadOnly
+      else
+
+        ipAddress="`corgiFetchSubstringBefore "$response" '|'`"
+        shareName="`corgiFetchSubstringAfter "$response" '|'`"
+
+        if [ -z "$ipAddress" -a -z "$shareName" ]
+        then
+          promptUserForSambaShareAddress $callback $mountAsReadOnly
+        elif [ -z "$ipAddress" ]
+        then
+          promptUserForSambaShareAddress $callback $mountAsReadOnly 1
+        elif [ -z "$shareName" ]
+        then
+          promptUserForSambaShareAddress $callback $mountAsReadOnly 3
+        else
+          $callback "$ipAddress" "$shareName" $mountAsReadOnly
+        fi
+
+      fi
+
+      exit $?
+
+    fi
+
+    exit $?
+
+  }
+
+  exit $?
+
+}
+
+
+# Prompts the user with a dialog, in which they can provide the user name and key to mount a Samba share
+# which requires authentication.
+#
+# $3 - string, required (may be empty), the Samba host IP address, used purely for display purposes
+# $4 - string, required (may be empty), the Samba share name, used purely for display purposes
+# $3 - function, required, a callback to be invoked after the user has provided their Samba client user name and key
+promptUserForSambaClientCredentials() {
+
+  ipAddress="$1"
+  shareName="$2"
+  callback=$3
+
+  dialogText="Enter the username and/or key for the Samba host."
+
+  if [ ! -z "$ipAddress" ]
+  then
+    dialogText="Enter the username and/or key for Samba host: $ipAddress"
+    shift
+  fi
+
+  if [ ! -z "$shareName" ]
+  then
+    dialogText="Enter the username and/or key for Samba share: //$ipAddress/$shareName"
+    shift
+  fi
+
+  shift
+
+  zenity --forms --title="User And/Or Key Required" --text="$dialogText" --add-entry="User:" --add-password="Key (if required):" | {
+
+    response='_ZENITY-CANCEL-VALUE_'
+
+    while read -r line
+    do
+
+      # Sometimes, Gtk throws warnings to pester developers about using their APIs.
+      # This results in garbage that users of those developers' products
+      # must deal with, so we must filter it out, here...
+      if ! corgiStartsWithSubstring "$line" 'Gtk-Message'
+      then
+        response="$line"
+        break
+      fi
+
+    done
+
+    if [ "$response" = '_ZENITY-CANCEL-VALUE_' ]
+    then
+      exit 0
+    else
+ 
+      if [ -z "$response" ]
+      then
+        promptUserForSambaClientCredentials "$ipAddress" "$shareName" $callback "$@"
+      else
+
+        user="`corgiFetchSubstringBefore "$response" '|'`"
+        key="`corgiFetchSubstringAfter "$response" '|'`"
+
+        if [ ! -z "$user" -a ! -z "$key" ]
+        then
+          $callback "$@" "$user" "$key"
+        elif [ ! -z "$user" ]
+        then
+          $callback "$@" "$user"
+        else
+          $callback "$@"
+        fi
+
+      fi
+
+      exit $?
+
+    fi
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echoes a string containing the mount path on which to mount a Samba share.
+#
+# $1 - string, required, the IP address for the Samba server, on which the share is hosted, 
+#      used in the path, partially to make the path unique, partially to readily identify
+#      the server on which the share is hosted, and shared as a mount point subdirectory
+#      by other shares which are hsoted on the same Samba server
+# $2 - string, required, the name of the Samba share being mounted, to make the path unique and serve
+#      as ready identification of the Samba share
+# $3 - string, required, the name of the user mounting the Samba share, used to place the path in that
+#      user's home path, to prevent collisions, aid in ensuring privacy, and prevent crowding of 
+#      the root file system
+#      (if the user happens to be "root", the mountpath is created in /media)
+buildSambaMountPointPath() {
+
+  ipAddress="$1"
+  shareName="$2"
+  userName="$3"
+  
+  mountPoint="/media/smb-$ipAddress-`corgiReplaceAllOccurrencesOfSubstring "$shareName" ' ' '-'`" 
+
+  # If udevil is not available, force mounting on the user's directory, 
+  # to ensure limited and safe permissions- we are NOT employing passwordless sudo on mkdir!
+  if ! $hasUdevil && [ "$userName" != 'root' ]
+  then
+    mountPoint="/home/$userName$mountPoint"
+  fi 
+
+  echo "$mountPoint"
+  exit $?
+
+}
+
+
+# Generates and echoes a substring from the mount point path, 
+# in the case that the path is in the user's home path,
+# to better fit the string in Openbox's menu, 
+# and make it more concise/aesthetic for the user.
+# This conforms to the generalized standard of abbreviating user home
+# directories with "~"
+#
+# $1 - string, required, the mount point path for a Samba share
+buildMountPointDisplayString() {
+
+  mountPointDisplay="$1"
+
+  if corgiStartsWithSubstring "$mountPoint" '/home'
+  then
+    # Shorten the mount point path for display purposes...
+    mountPointDisplay="`corgiFetchSubstringAfter "$mountPointDisplay" '/home/' 'first'`"
+    mountPointDisplay="`corgiFetchSubstringAfter "$mountPointDisplay" '/' 'first'`"
+    mountPointDisplay="~/`corgiObEscapeUnderscores "$mountPointDisplay"`"
+  fi
+
+  echo "$mountPointDisplay"
+  exit $?
+
+}
+
+
+# Performs cleanup (normally invoked after unmounting a share, when udevil is not involved (udevil performs its own cleanup))- 
+# removes the mount point, to include all subdirectories between, but not including, the base directory (normally /media or ~/media) 
+# and the share's mount directory, if (and ONLY if) it was created by scripts within this function's parent library, 
+# at mount time (identified by label smb-ip.address-samba.share.name as part of the path), 
+# for the sole purpose of mounting the Samba share, and are empty...
+#
+# $1 - string, required, the mount point path on which the Samba share was mounted,
+#      now ready for deletion (if it was created by this function's library 
+#      at mount time and is empty)
+# $2 - string, required, the IP address for the Samba server on which the now unmounted share is hosted,
+#      used in verifying that the mount point was created by scripts within this function's parent library 
+#      at mount time (identified by /corgi/samba/<samba.ip.address>/<samba.share.name> as part of the path)
+# $3 - string, required, the name for Samba share on which was mounted at this mount point location,
+#      used in verifying that the mount point belonged to that Samba share and was created by scripts within this 
+#      function's parent library at mount time 
+#      (identified by /corgi/samba/<samba.ip.address>/<samba.share.name> as part of the path)
+cleanSambaMountPath() {
+
+  mountPoint="$1"
+  ipAddress="$2"
+  shareName="$3"
+
+  if [ ! -e "$mountPoint" ]
+  then
+    echo "Error: could not remove mount point - path does not exist"
+    exit 1
+  fi
+
+  if [ ! -d "$mountPoint" ]
+  then
+    echo "Error: could not remove mount point - path is not directory"
+    exit 1
+  fi
+
+  if ! corgiHasSubstring "smb-$ipAddress"
+  then
+    echo "Error: could not remove mount point - path is not corgi"
+    exit 1
+  fi
+
+  if ! corgiHasSubstring "smb-$ipAddress-$shareName"
+  then
+    echo "Error: could not remove mount point - path is not share"
+    exit 1
+  fi
+
+  if corgiMountPointHasMount "$mountPoint"
+  then
+    echo "Error: could not remove mount point - path is mounted"
+    exit 1
+  fi
+
+  if corgiDirectoryIsPopulated "$mountPoint"
+  then
+    echo "Error: could not remove mount point - path is not empty"
+    exit 1
+  fi
+
+  # using '# rmdir' here, as an extra measure,
+  # to ensure no populated subdirectories are removed...
+  rmdir "$mountPoint"
+
+  exit $?
+
+}
+
+
+# Parses the response resulting from an attempt to mount a Samba share (provided by the caller)
+# to determine if the attempt was successful or not. In the case of a successful mount,
+# the user is presented with a notification. In the case of an error, the error determines the next action. 
+# In the case of a permissions error, the function responsible for mounting is invoked,
+# and passed an arg which directs it to retry with sudo. In the case of an address or authentication failure, 
+# a separate function is invoked, which is then responsible for obtaining the correct address or 
+# Samba client credentials and making an additional mount attempt. In most error cases which involve 
+# invoking functions, several or all args supplied to this function are passed. 
+# In error cases which aren't covered, the user is presented with an error notification.
+#
+# $1 - string, required, the response message received after a mount atteempt by the calling function
+# $2 - string, required, the mount point path at which the Samba share is to be mounted
+# $3 - string, required, the Samba host IP address
+# $4 - string, required, the Samba share name
+# $5 - true or false, required, whether or not the Samba share is to be mounted as read-only
+# $6 - true or false, required, whether or not the caller should retry the mount attempt using sudo
+parseSambaShareMountResponse() {
+
+  response="$1"
+  mountPoint="$2"
+  ipAddress="$3"
+  shareName="$4"
+  mountAsReadOnly=$5
+  useSudo=$6
+
+  if corgiStartsWithSubstring "$response" 'Success'
+  then
+
+    # Shorten the mount point path for display purposes...
+    mountPointDisplay="`buildMountPointDisplayString "$mountPoint"`"
+ 
+    if $hasNotify
+    then
+      notify-send "\"$shareName\" was mounted at: $mountPointDisplay"
+    elif $hasZenity
+    then
+      zenity --info --title="Success" --text="\"$shareName\" was mounted at: $mountPointDisplay"
+    fi
+
+  else
+
+    cleanSambaMountPath "$mountPoint" "$ipAddress" "$shareName" | {
+
+      if corgiHasSubstring "$response" 'only root' || corgiHasSubstring "$response" 'not permitted'
+      then
+
+        mountSambaShare "$ipAddress" "$shareName" $mountAsReadOnly true
+
+      elif corgiHasSubstring "$response" 'Permission denied'
+      then 
+       
+        if $hasZenity
+        then
+          promptUserForSambaClientCredentials "$ipAddress" "$shareName" mountSambaShare "$ipAddress" "$shareName" $mountAsReadOnly $useSudo
+        fi
+
+      elif corgiHasSubstring "$response" 'Operation now in progress' || corgiHasSubstring "$response" 'could not resolve address' \
+      || corgiHasSubstring "$response" 'Unable to find suitable address' || corgiHasSubstring "$response" 'bad UNC'
+      then
+
+        if $hasZenity
+        then
+          promptUserForSambaShareAddress mountSambaShare $mountAsReadOnly 2 "$ipAddress" "$shareName"
+        fi
+
+      elif corgiHasSubstring "$response" 'Unable to find suitable address' || corgiHasSubstring "$response" 'bad UNC'
+      then
+
+        if $hasZenity
+        then
+          promptUserForSambaShareAddress mountSambaShare $mountAsReadOnly 2 "$ipAddress" "$shareName"
+        fi
+
+      elif corgiHasSubstring "$response" 'No such device'
+      then
+
+        if $hasZenity
+        then
+          promptUserForSambaShareAddress mountSambaShare $mountAsReadOnly 4 "$ipAddress" "$shareName"
+        fi
+
+      else
+
+        if corgiHasSubstring "$response" 'no askpass'
+        then
+          response="`echo "Couldn't mount \"$shareName\".\nIt appears you are attempting to use mount directly, instead of udevil.\nYou'll need to add mount and umount to the NOPASSWD list for your sudoer."`"
+        else
+          response="`echo "Couldn't mount \"$shareName\".\n$response"`"
+        fi
+
+        if $hasZenity
+        then
+          zenity --error --title="Error" --text="$response"
+        fi
+
+      fi 
+
+    }
+
+  fi
+
+  exit $?
+
+}
+
+
+# Mounts a Samba share at the specified mount point. 
+# Uses udevil to mount the share, if it's available (this is the preferred method). 
+# In the absence of udevil, will attempt to use mount (mount.cifs), both with and without passwordless sudo, to mount the share.
+# If no Samba user or password are provided, it will attempt to mount the share as guest.
+#
+# $1 - string, required, the mount point path at which the Samba share should be mounted
+# $2 - string, required, the Samba host IP address
+# $3 - string, required, the Samba share name
+# $4 - string, required, the user's system-assigned ID
+# $5 - string, required, the user's system-assigned group ID
+# $6 - true or false, optional, whether or not the share should be mounted as read-only
+# $7 - true or false, optional, whether or not the function should run the '# mount -t cifs' command using sudo
+# $8 - string, optional, Samba user name
+# $9 - string, optional, the Samba user password
+mountSambaShareAt() {
+
+  mountPoint="$1"
+  ipAddress="$2"
+  shareName="$3"
+  userId="$4"
+  groupId="$5"
+  mountAsReadOnly=$6
+  useSudo=$7
+  sambaUser="$8"
+  sambaKey="$9"
+
+  mountCommand="mount -t cifs //$ipAddress/$shareName $mountPoint -o"
+
+  if $hasUdevil
+  then
+    useSudo=false
+    mountCommand="udevil $mountCommand"  
+  fi
+
+  if [ ! -z "$sambaUser" ]
+  then
+
+    mountCommand="$mountCommand user=$sambaUser"
+
+    if [ ! -z "$sambaKey" ]
+    then
+      mountCommand="$mountCommand,password=$sambaKey"
+    fi
+
+  else
+    mountCommand="$mountCommand guest"
+  fi 
+
+  mountCommand="$mountCommand,uid=$userId,gid=$groupId"
+
+  if [ ! -z "$mountAsReadOnly" ] && $mountAsReadOnly
+  then
+    mountCommand="$mountCommand,ro"
+  else
+    mountCommand="$mountCommand,rw"
+  fi
+
+  if ! $hasUdevil
+  then
+    mountCommand="$mountCommand,noperm"
+  fi
+
+  if [ ! -z "$useSudo" ] && $useSudo
+  then
+    mountCommand="sudo $mountCommand"
+  fi
+
+  $mountCommand 2>&1 | {
+
+    response=''
+
+    while read -r line
+    do
+
+      # Get just the first line of output, unless a retry was attempted (in which case, get the second)...
+      if ! corgiStartsWithSubstring "$line" 'udevil' && ! corgiHasSubstring "$line" 'Retrying'
+      then
+        response="$line"
+        break
+      fi
+
+    done
+
+    if [ -z "$response" ] || corgiStartsWithSubstring "$response" 'Mounted'
+    then
+      response='Success'
+    fi
+
+    echo "$response"
+    exit $?
+
+  }
+
+  exit $?
+
+}
+
+
+# Mounts a Samba share.
+# If udevil is not available for mounting, it will create the mount point, 
+# and attempt to invoke the mount function both with and without passwordless sudo.
+# If no Samba user or password are provided, it will attempt to mount the share as guest.
+#
+# $2 - string, required, the Samba host IP address
+# $3 - string, required, the Samba share name
+# $6 - true or false, optional, whether or not the share should be mounted as read-only
+# $7 - true or false, optional, whether or not the function should run the '# mount -t cifs' command using sudo
+# $8 - string, optional, Samba user name
+# $9 - string, optional, the Samba user password
+mountSambaShare() {
+
+  ipAddress="$1"
+  shareName="$2"
+  mountAsReadOnly=$3
+  useSudo=$4
+  sambaUser="$5"
+  sambaKey="$6"
+
+  if [ -z "$mountAsReadOnly" ]
+  then
+    mountAsReadOnly=false
+  fi
+
+  if $hasUdevil || [ -z "$useSudo" ]
+  then
+    useSudo=false
+  fi
+
+  userId="`corgiFetchCurrentUserInfo 'id'`"
+  userName="`corgiFetchCurrentUserInfo 'name'`"  
+  groupId="`corgiFetchCurrentUserInfo 'gid'`"
+  
+  mountPoint="`buildSambaMountPointPath "$ipAddress" "$shareName" "$userName"`"
+
+  if ! $hasUdevil && [ ! -d  "$mountPoint" ]
+  then
+    mountResponse="`mkdir -p "$mountPoint" && mountSambaShareAt "$mountPoint" "$ipAddress" "$shareName" "$userId" "$groupId" $mountAsReadOnly $useSudo "$sambaUser" "$sambaKey"`"
+    parseSambaShareMountResponse "$mountResponse" "$mountPoint" "$ipAddress" "$shareName" $mountAsReadOnly $useSudo
+  else
+
+    if ! corgiMountPointHasMount "$mountPoint"
+    then
+      mountResponse="`mountSambaShareAt "$mountPoint" "$ipAddress" "$shareName" "$userId" "$groupId" $mountAsReadOnly $useSudo "$sambaUser" "$sambaKey"`"
+      parseSambaShareMountResponse "$mountResponse" "$mountPoint" "$ipAddress" "$shareName" $mountAsReadOnly $useSudo
+    fi
+
+  fi
+
+  exit $?
+
+}
+
+
+# Unmounts the Samba share mounted at the specified mount point. 
+# Uses udevil to unmount the share, if it's available (this is the preferred method). 
+# In the absence of udevil, will attempt to use umount, both with and without passwordless sudo, to unmount the share.
+# In the absence of udevil, it will also invoke a cleanup function to remove the mount path.
+#
+# $1 - string, required, the mount point path at which the Samba share should be mounted
+# $2 - string, required, the Samba host IP address
+# $3 - string, required, the Samba share name
+# $7 - true or false, optional, whether or not the function should attempt to umount using sudo
+unmountSambaShare() {
+
+  mountPoint="$1"
+  ipAddress="$2"
+  shareName="$3"
+  useSudo=$4
+
+  mountPointDisplay="`buildMountPointDisplayString "$mountPoint"`"
+
+  unmountCommand="umount $mountPoint"
+
+  if $hasUdevil
+  then
+    useSudo=false
+    unmountCommand="udevil $unmountCommand"  
+  fi
+
+  if [ ! -z "$useSudo" ] && $useSudo
+  then
+    unmountCommand="sudo $unmountCommand"
+  fi
+
+  $unmountCommand 2>&1 | {
+
+    response=''
+
+    while read -r line
+    do
+
+      # Get just the first line of output...
+      response="$line"
+      break
+
+    done
+
+    if [ -z "$response" ]
+    then
+
+      if $hasUdevil
+      then
+
+        if $hasNotify
+        then
+
+          # Notification may run before cleanup is done, but that is OK...
+          notify-send "\"$shareName\" was unmounted from: $mountPointDisplay"
+
+        elif $hasZenity
+        then
+          zenity --info --title="Success" --text="\"$shareName\" unmounted from: $mountPointDisplay"
+        fi
+
+      elif ! corgiMountPointHasMount "$mountPoint"
+      then
+
+        cleanMountPathReponse="`cleanSambaMountPath "$mountPoint" "$ipAddress" "$shareName"`"
+
+        if [ -z "$cleanMountPathResult" ] \
+        || corgiEndsWithSubstring "$cleanMountPathReponse" 'path does not exist.' \
+        || corgiEndsWithSubstring "$cleanMountPathReponse" 'path is not corgi.' || corgiEndsWithSubstring "$cleanMountPathReponse" 'path is not share.' \
+        || corgiEndsWithSubstring "$cleanMountPathReponse" 'path is not directory.' || corgiEndsWithSubstring "$cleanMountPathReponse" 'path is not empty.'
+        then
+
+          if $hasNotify
+          then
+
+            # Notification may run before cleanup is done, but that is OK...
+            notify-send "\"$shareName\" was unmounted from: $mountPointDisplay"
+
+          elif $hasZenity
+          then
+            zenity --info --title="Success" --text="\"$shareName\" unmounted from: $mountPointDisplay"
+          fi
+
+        else
+
+          # This case, in which we cannot remove the mount directory, 
+          # after unmount, will likely never be encountered, 
+          # but in case it is...
+
+          if $hasZenity
+          then
+            zenity --info --title="Error" --text="`echo "\"$shareName\" was unmounted.\nHowever, we couldn't remove the mount directory: $mountPointDisplay\n$response"`"
+          fi
+
+        fi
+
+      else
+
+        if $hasZenity
+        then
+          zenity --info --title="Error" --text="Unable to unmount \"$shareName\" from: $mountPointDisplay"
+        fi
+
+      fi
+
+    else
+
+      if ! $hasUdevil && corgiHasSubstring "$response" 'not permitted'
+      then
+        unmountSambaShare "$mountPoint" "$ipAddress" "$shareName" true
+      else
+
+        if $hasZenity
+        then
+          zenity --info --title="Error" --text="`echo "Unable to unmount \"$shareName\".\n$response"`"
+        fi
+
+      fi
+
+    fi
+
+  }
+
+  exit $?
+
+}
+
+
+# Obtains and echos data describing the specified aspect of a Samba host.
+#
+# $1 - string, required, the Samba host IP address
+# $2 - string, required, the type of descriptive data desired, reflective of what's made available by the host server -
+#      options are "all" (all data), "ipc" (data pertaining to the share responsible for IPC services), 
+#      "shares" (data describing the available shares), 
+#      or "system" (data describing the Samba host, such as workgroup name, operating system, and Samba version)
+# $3 - function, required, called upon data retrieval, responsible for parsing and formatting the data
+# $4 - string, optional, Samba user name
+# $5 - string, optional, the Samba user password
+getSambaHostData() {
+
+  ipAddress="$1"
+  dataType="$2"
+  callback="$3"
+  sambaUser="$4"
+  sambaKey="$5"
+
+  smbclientCommand="smbclient --debuglevel=0 --list=$ipAddress --no-pass --grepable"
+
+  if [ "$dataType" != 'all' -a "$dataType" != 'domain' -a "$dataType" != 'ipc' -a "$dataType" != 'shares' ]
+  then
+    dataType='all'
+  fi
+
+  if [ ! -z "$sambaUser" ]
+  then
+
+    credentials="--user=$sambaUser"
+
+    if [ ! -z "$sambaKey" ]
+    then
+      $credentials="$credentials%$sambaKey"
+    else
+      $credentials="$credentials --no-pass"
+    fi
+
+    smbclientCommand="smbclient --debuglevel=0 --list=$ipAddress $credentials --grepable"
+
+  fi
+
+  $smbclientCommand 2>&1 | {
+
+    count=0
+    callbackContent=''
+
+    while read -r line
+    do
+
+      if [ $count -eq 0 ] && corgiHasSubstring "$line" 'NT_STATUS_LOGON_FAILURE'
+      then
+
+        callbackContent='_AUTHENTICATION-REQUIRED_'
+
+      elif [ $count -eq 0 ] && corgiHasSubstring "$line" 'NT_STATUS_CONNECTION_REFUSED'
+      then
+
+        callbackContent='_CONNECTION-REFUSED_'
+
+      elif [ -z "$key" -a $count -gt 0 -o ! -z "$key" -a $count -eq 0 ]
+      then
+
+        # Filter empty lines and info/error messages- we need only the actual, usable data...
+        if [ ! -z "$line" ] && ! corgiStartsWithSubstring "$line" 'NetBIOS over TCP' && ! corgiStartsWithSubstring "$line" 'Anonymous login' \
+        && ! corgiStartsWithSubstring "$line" 'querying' && ! corgiStartsWithSubstring "$line" "Connection to $ipAddress"
+        then
+
+          case "$dataType" in
+
+            'all')
+
+              if ! corgiStartsWithSubstring "$line" 'Domain=['
+              then
+                line="`corgiFetchSubstringBetween "$line" '|'`"
+              fi    
+
+              callbackContent="$callbackContent`$callback "$ipAddress" "$dataType" "$line"`"
+
+            ;;
+
+            'ipc')
+
+              if corgiStartsWithSubstring "$line" 'IPC'
+              then
+                line="`corgiFetchSubstringAfter "$line" '|'`"
+                callbackContent="$callbackContent`$callback "$ipAddress" "$dataType" "$line"`"
+                break
+              fi    
+
+            ;;
+
+            'shares')
+
+              if ! corgiStartsWithSubstring "$line" 'Domain=[' && ! corgiStartsWithSubstring "$line" 'IPC'
+              then
+                line="`corgiFetchSubstringBetween "$line" '|'`"
+                callbackContent="$callbackContent`$callback "$ipAddress" "$dataType" "$line"`"
+              fi    
+
+            ;;
+
+            'system')
+
+              if corgiStartsWithSubstring "$line" 'Domain=['
+              then
+                callbackContent="$callbackContent`$callback "$ipAddress" "$dataType" $line`"
+                break
+              fi    
+
+            ;;
+
+          esac
+
+        fi 
+
+      fi
+
+      count=$(($count + 1))
+
+    done
+
+    echo "$callbackContent"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+# Helper function, generates and echoes openbox menu items which describe aspects of the Samba host, 
+# by parsing data provided by the caller. 
+# (This logic is intended to be used as a callback function for function '# getSambaHostData', 
+# and is separated in order to reduce code complexity.)
+#
+# $1 - required, shifted, supplied as part of callback by function '# getSambaHostData'
+# $2 - string, required, the type of descriptive data to be parsed, reflective of what's made available by the host server -
+#      options are "all" (all data), "ipc" (data pertaining to the share responsible for IPC services), 
+#      "shares" (data describing the available shares), 
+#      or "system" (data describing the Samba host, such as workgroup name, operating system, and Samba version)
+# $3 - string, required, data describing an aspect of a Samba host
+buildSambaHostDetailItems() {
+
+  detailItems=''
+
+  shift
+
+  dataType="$1"
+
+  shift
+
+  case "$dataType" in
+
+    'ipc')
+        label="`corgiFetchSubstringBefore "$1" ' ('`"
+        value="`corgiFetchSubstringBetween "$1" '(' ')'`"
+        detailItems="$detailItems`corgiObMenuItem "label:$label: $value"`"
+    ;;
+
+    'system')
+
+      for arg in "$@"
+      do     
+
+        label="`corgiFetchSubstringBefore "$arg" '=['`"
+        value="`corgiFetchSubstringBetween "$arg" '=[' ']'`"
+        detailItems="$detailItems`corgiObMenuItem "label:$label: $arg"`"
+
+      done  
+
+    ;;
+
+  esac
+
+  echo "$detailItems"
+  exit $?
+
+}
+
+
+# Finds and echoes the mount path of the Samba share described by the provided Samba host
+# IP address and share name. If no match is found, echoes an empty string.
+#
+# $1 - string, required, the Samba host IP address
+# $2 - string, requried, the Samba share name
+buildMountedSambaSharePath() {
+
+  ipAddress="$1"
+  shareName="$2"
+
+  mount -t cifs | {
+
+    while read -r line
+    do
+
+      ipAddressAndShareName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+      ipAddressForComparison="`corgiFetchSubstringBetween "$ipAddressAndShareName" '//' '/'`"
+      shareNameForComparison="`corgiFetchSubstringAfter "$ipAddressAndShareName" '/'`"
+
+      if [ "$ipAddressForComparison" = "$ipAddress" -a "$shareNameForComparison" = "$shareName" ]
+      then
+
+        mountPoint="`corgiFetchSubstringBetween "$line" 'on' 'type' 'first'`"
+        mountPoint="`corgiTrimWhiteSpace "$mountPoint"`"
+
+        echo "$mountPoint"
+        exit 0
+
+      fi
+
+    done
+
+  }
+ 
+  echo ""
+  exit $?
+
+}
+
+
+# Helper function, generates and echoes an openbox menu which describe a Samba share and 
+# provides the option to mount that share, by parsing data provided by the caller. 
+# (This is intended to be used as a callback function for function '# getSambaHostData', 
+# and is separated in order to reduce code complexity.)
+#
+# $1 - string, required, the Samba host IP address
+# $2 - required, shifted, supplied as part of callback by function '# getSambaHostData'
+# $3 - string, required, data describing a Samba share
+buildSambaHostShareMenu() {
+
+  shareName=''
+
+  ipAddress="$1"
+
+  shift
+  shift
+
+  if [ $# -gt 1 ]
+  then
+
+    for arg in "$@"
+    do
+      shareName="$shareName $arg"
+    done
+
+  else
+    shareName="$1"  
+  fi
+
+  mountPoint="`buildMountedSambaSharePath "$ipAddress" "$shareName"`"
+  shareNameDisplay="`corgiObEscapeUnderscores "$shareName"`"
+
+  if [ -z "$mountPoint" ]
+  then
+
+    mountCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; mountSambaShare \"$ipAddress\" \"$shareName\"'"
+    mountRoCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; mountSambaShare \"$ipAddress\" \"$shareName\" true'"
+
+    shareItems="`corgiObMenuItem "label:Mount" "action:Execute" "command:$mountCommand"`"
+    shareItems="$shareItems`corgiObMenuItem "label:Mount Read-Only" "action:Execute" "command:$mountRoCommand"`"
+
+  else
+
+    unmountCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; unmountSambaShare \"$mountPoint\" \"$ipAddress\" \"$shareName\"'"
+
+    mountPointDisplay="`buildMountPointDisplayString "$mountPoint"`"
+
+    shareItems="`corgiObMenuItem "label:Mounted At: $mountPointDisplay"`"
+    shareItems="$shareItems`corgiObMenuItem "label:Unmount" "action:Execute" "command:$unmountCommand"`"
+
+  fi
+
+  menuId="`corgiMakeIdString "corgi-menu-samba-host-share-"`"
+  shareMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/drive-harddisk.png"
+  shareMenu="`corgiObMenu "id:$menuId" "icon:$shareMenuIcon" "label:$shareNameDisplay" "content:$shareItems"`"
+
+  echo "$shareMenu"
+  exit $?
+
+}
+
+
+# Generates and echoes an Openbox pipe menu consisting of data which describes a Samba host.
+# 
+# $1 - string, required, the Samba host IP address
+# $2 - string, required, describes whether or not the Samba host is a Domain Master Browser
+# $3 - string, required, describes whether or not the Samba host is a Local Master Browser
+# $4 - string, required, the name of the Samba host workgroup
+# $5 - string, required, the operating system which is host to the Samba host
+# $6 - string, required, the Samba host version
+buildSambaHostMenuContent() {
+
+  hostMenuContent=''
+
+  ipAddress="$1"
+  isDomainMaster="$2"
+  isLocalMaster="$3"
+  workgroup="$4"
+  os="$5"
+  sambaVersion="$6"
+
+  menuId="`corgiMakeIdString "corgi-menu-samba-host-details-"`"
+  detailItems="`getSambaHostData "$ipAddress" 'system' buildSambaHostDetailItems`"
+
+  case "$detailItems" in
+
+    '_AUTHENTICATION-REQUIRED_')
+
+      detailItems="`corgiObMenuItem "label:IP Address: $ipAddress"`$detailItems"
+      detailItems="$detailItems`corgiObMenuItem "label:Is Browsable: no"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Reason: authenitcation required"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Workgroup: $workgroup"`"
+      detailItems="$detailItems`corgiObMenuItem "label:OS: $os"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Samba Version: $sambaVersion"`"
+
+      detailsMenu="`corgiObMenu "id:$menuId" "label:Details" "content:$detailItems"`"
+      hostMenuContent="$hostMenuContent$detailsMenu"
+
+    ;;
+
+    '_CONNECTION-REFUSED_')
+
+      detailItems="`corgiObMenuItem "label:IP Address: $ipAddress"`$detailItems"
+      detailItems="$detailItems`corgiObMenuItem "label:Is Browsable: no"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Reason: connection refused"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Workgroup: $workgroup"`"
+      detailItems="$detailItems`corgiObMenuItem "label:OS: $os"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Samba Version: $sambaVersion"`"
+
+      detailsMenu="`corgiObMenu "id:$menuId" "label:Details" "content:$detailItems"`"
+      hostMenuContent="$hostMenuContent$detailsMenu"
+
+    ;;
+
+    *)
+
+      detailItems="`corgiObMenuItem "label:IP Address: $ipAddress"`$detailItems"
+      detailItems="$detailItems`corgiObMenuItem "label:Is Browsable: yes"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Is Domain Master: $isDomainMaster"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Is Local Master: $isLocalMaster"`"
+
+      ipcDetails="`getSambaHostData "$ipAddress" 'ipc' buildSambaHostDetailItems`"
+
+      if [ ! -z "$ipcDetails" ]
+      then
+        detailItems="$detailItems$ipcDetails"
+      fi
+
+      detailItems="$detailItems`corgiObMenuItem "label:Workgroup: $workgroup"`"
+      detailItems="$detailItems`corgiObMenuItem "label:OS: $os"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Samba Version: $sambaVersion"`"
+
+      detailsMenu="`corgiObMenu "id:$menuId" "label:Details" "content:$detailItems"`"
+      hostMenuContent="$hostMenuContent$detailsMenu"
+
+      menuId="`corgiMakeIdString "corgi-menu-samba-host-shares-"`"
+      sharesMenu="`getSambaHostData $ipAddress 'shares' buildSambaHostShareMenu`"
+      sharesMenu="`corgiObMenu "id:$menuId" "label:Shares" "content:$sharesMenu"`"
+
+      hostMenuContent="$hostMenuContent$sharesMenu"
+
+    ;;
+
+  esac
+
+  hostMenuContent="`corgiObPipeMenu "content:$hostMenuContent"`"
+
+  echo "$hostMenuContent"
+  exit $?
+
+}
+
+
+# Finds and echoes the name for the Samba host located at the provided IP address.
+#
+# $1 - string, required, the Samba host IP address
+getHostNameFromIpAddress() {
+
+  ipAddress="$1"
+
+  findsmb | {
+
+    hostName=''
+
+    while read -r line
+    do
+
+      # The first two lines of output are generally querying info, so skip that...
+      if [ ! -z "$line" ] && ! corgiHasSubstring "$line" '*=DMB' && ! corgiHasSubstring "$line" '+=LMB' \
+      && ! corgiStartsWithSubstring "$line" 'IP ADDR' && ! corgiStartsWithSubstring "$line" '---'
+      then 
+
+        # The output from command '# findsmb' is a tad wonky, 
+        # so we're forced to rely on string manipulation to set our variables.
+        # (I'd much rather parse each line as args.)
+        # This, surely, will make things more complicated, and, just as surely, will slow performance...
+
+        line="`corgiTrimWhiteSpace "$line"`"
+        ipAddressForComparison="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+
+        if [ "$ipAddressForComparison" = "$ipAddress" ]
+        then
+          line="`corgiFetchSubstringAfter "$line" "$ipAddressForComparison" 'first'`"
+          line="`corgiTrimWhiteSpace "$line"`"
+          hostName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+          break
+        fi
+
+      fi
+
+    done
+
+    echo "$hostName"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echoes an Openbox menu consisting of data which describes mounted Samba shares.
+buildCurrentSambaMountsMenu() {
+
+  mount -t cifs | {
+
+    mountsMenu=''
+
+    while read -r line
+    do
+
+      ipAddressAndShareName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+      ipAddress="`corgiFetchSubstringBetween "$ipAddressAndShareName" '//' '/'`"
+      shareName="`corgiFetchSubstringAfter "$ipAddressAndShareName" '/'`"
+
+      mountPoint="`corgiFetchSubstringBetween "$line" 'on' 'type'`"
+      mountPoint="`corgiTrimWhiteSpace "$mountPoint"`"
+
+      mountPointDisplay="`buildMountPointDisplayString "$mountPoint"`"
+
+      hostName="`getHostNameFromIpAddress "$ipAddress"`"
+
+      if [ ! -z "$hostName" ]
+      then
+        hostNameDisplay="`corgiObEscapeUnderscores "$hostName"`"
+        mountItems="`corgiObMenuItem "label:Host: $hostNameDisplay"`"
+        mountItems="$mountItems`corgiObMenuItem "label:Host IP: $ipAddress"`"
+      else
+        mountItems="`corgiObMenuItem "label:Host IP: $ipAddress"`"
+      fi
+
+      unmountCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; unmountSambaShare \"$mountPoint\" \"$ipAddress\" \"$shareName\"'"
+
+      mountItems="$mountItems`corgiObMenuItem "label:Mounted At: $mountPointDisplay"`"
+      mountItems="$mountItems`corgiObMenuItem "label:Unmount" "action:Execute" "command:$unmountCommand"`"
+
+      shareNameDisplay="`corgiObEscapeUnderscores "$shareName"`"
+
+      menuId="`corgiMakeIdString "corgi-menu-samba-share-mounted-"`"
+      mountMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/drive-harddisk.png"
+      mountMenu="`corgiObMenu "id:$menuId" "icon:$mountMenuIcon" "label:$shareNameDisplay" "content:$mountItems"`"
+      mountsMenu="$mountsMenu$mountMenu"
+
+    done
+
+    if [ ! -z "$mountsMenu" ]
+    then
+      menuId="`corgiMakeIdString "corgi-menu-samba-shares-mounted-"`"
+      mountsMenu="`corgiObMenu "id:$menuId" "label:Mounts" "content:$mountsMenu"`"
+    fi
+
+    echo "$mountsMenu"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echoes an Openbox pipe menu consisting of data which describes available Samba hosts.
+buildSambaHostMenus() {
+
+  findsmb | {
+
+    hostMenus=''
+
+    while read -r line
+    do
+
+      # The first two lines of output are generally querying info, so skip that...
+      if [ ! -z "$line" ] && ! corgiHasSubstring "$line" '*=DMB' && ! corgiHasSubstring "$line" '+=LMB' \
+      && ! corgiStartsWithSubstring "$line" 'IP ADDR' && ! corgiStartsWithSubstring "$line" '---'
+      then 
+
+        isDomainMaster='no'
+        isLocalMaster='no'
+        workgroup='unkown'
+        os='unknown'
+        sambaVersion='unknown'
+
+        # The output from command '# findsmb' is a tad wonky, 
+        # so we're forced to rely on string manipulation to set our variables.
+        # (I'd much rather parse each line as args.)
+        # This, surely, will make things more complicated, and, just as surely, will slow performance...
+
+        line="`corgiTrimWhiteSpace "$line"`"
+        ipAddress="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+
+        line="`corgiFetchSubstringAfter "$line" "$ipAddress" 'first'`"
+        line="`corgiTrimWhiteSpace "$line"`"
+
+        hostName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+
+        line="`corgiFetchSubstringAfter "$line" "$hostName" 'first'`"
+        line="`corgiTrimWhiteSpace "$line"`"
+
+        if corgiStartsWithSubstring "$line" '*['
+        then
+          isDomainMaster='yes'
+        fi
+ 
+        if corgiStartsWithSubstring "$line" '+['
+        then
+          isLocalMaster='yes'
+        fi   
+
+        if ! corgiStartsWithSubstring "$line" 'Unknown'
+        then
+
+          workgroup="`corgiFetchSubstringBetween "$line" '[' ']' 'first'`"
+          line="`corgiFetchSubstringAfter "$line" "[$workgroup]"`"
+
+          workgroup="`corgiTrimWhiteSpace "$workgroup"`"
+          line="`corgiTrimWhiteSpace "$line"`"
+
+          if [ ! -z "$line" ]
+          then
+
+            os="`corgiFetchSubstringBetween "$line" '[' ']' 'first'`"
+            line="`corgiFetchSubstringAfter "$line" "[$os]"`"
+
+            os="`corgiTrimWhiteSpace "$os"`"
+            line="`corgiTrimWhiteSpace "$line"`"
+
+            if [ ! -z "$line" ]
+            then
+              sambaVersion="`corgiFetchSubstringBetween "$line" '[Samba' ']' 'first'`"
+              sambaVersion="`corgiTrimWhiteSpace "$sambaVersion"`"
+            fi
+
+          fi
+
+        fi
+
+        hostNameDisplay="`corgiObEscapeUnderscores "$hostName"`"
+
+        menuId="`corgiRemoveAllOccurrencesOfSubstring "$ipAddress" '.'`"
+        menuId="`corgiMakeIdString "corgi-menus-samba-host-$menuId-"`"
+        hostMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network-server.png"
+        hostMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib&quot; ; buildSambaHostMenuContent &quot;$ipAddress&quot; &quot;$isDomainMaster&quot; &quot;$isLocalMaster&quot; &quot;$workgroup&quot; &quot;$os&quot; &quot;$sambaVersion&quot;'"
+        hostMenus="$hostMenus`corgiObMenu "id:$menuId" "icon:$hostMenuIcon" "label:$hostNameDisplay" "execute:$hostMenuCommand"`"
+
+      fi
+
+    done
+
+    hostPipeMenus="`corgiObPipeMenu "content:$hostMenus"`"
+
+    echo "$hostPipeMenus"
+    exit 0
+
+  }
+
+  exit $?
+
+}

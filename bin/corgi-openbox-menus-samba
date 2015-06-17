@@ -1,0 +1,81 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-samba - Generates an Openbox Pipemenu for managing a samba server, as well as connections, as a client, to samba shares, using samba and smbclient as backends.
+#
+# v2015.05.22
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-openbox-menus-samba.shlib
+# Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
+# Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
+# Requires: samba
+# Requires: smbclient
+
+exitStatus=1
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+corgiObMenusSambaLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib"
+
+if [ ! -e "$corgiObMenusSambaLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-samba): The Corgi Openbox Samba Menu library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-samba): The Corgi Openbox Samba Menu library is not present. Exiting..."
+  exit $exitStatus
+fi
+
+. "$corgiObMenusSambaLib"
+
+pipeMenu=''
+pipeMenuContent=''
+
+if ! command -v smbclient > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-samba): smbclient command not found. Please install smbclient or the Samba package"
+  pipeMenuContent=`corgiObMenuItem "label:smbclient command requires smbclient package..."`
+elif ! command -v nmblookup > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-samba): nmblookup command not found. Please install smbclient or the Samba package"
+  pipeMenuContent=`corgiObMenuItem "label:nmblookup command requires smbclient package..."`
+else
+
+  menuId="`corgiMakeIdString "corgi-menus-samba-hosts"`"
+  hostMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib&quot; ; buildSambaHostMenus'"
+  hostsMenu="`corgiObMenu "id:$menuId" "label:Hosts" "execute:$hostMenuCommand"`" 
+
+  pipeMenuContent="$pipeMenuContent$hostsMenu"
+
+  mountsMenu="`buildCurrentSambaMountsMenu`"
+  pipeMenuContent="$pipeMenuContent$mountsMenu"
+ 
+  mountByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare false'"
+  mountByAddressItems="`corgiObMenuItem "label:Mount By Address" "action:Execute" "command:$mountByAddressCommand"`"
+
+  mountRoByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare true'"
+  mountByAddressItems="$mountByAddressItems`corgiObMenuItem "label:Mount Read-Only By Address" "action:Execute" "command:$mountRoByAddressCommand"`"
+  
+  pipeMenuContent="$pipeMenuContent$mountByAddressItems"
+
+fi
+
+pipeMenu="`corgiObPipeMenu "content:$pipeMenuContent"`"
+exitStatus=$?
+
+if [ -z "$pipeMenu" ]
+then
+  logger "ERROR (corgi-openbox-menus-samba): Unable to generate pipe menu. Exiting..."
+  echo "ERROR (corgi-openbox-menus-samba): Unable to generate pipe menu. Exiting..."
+else
+  echo "$pipeMenu"
+fi
+
+exit $exitStatus
