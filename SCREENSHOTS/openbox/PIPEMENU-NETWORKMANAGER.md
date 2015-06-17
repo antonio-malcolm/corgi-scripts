@@ -14,7 +14,7 @@
 ###### Making A Conneciton
 ![Making A Connection](../img/corgi-openbox-menu-networkmanager-make-connection.png?raw=true "Making A Connection")
 
-###### Adding A Hidden Networkn
+###### Adding A Hidden Network
 ![Adding A Hidden Network](../img/corgi-openbox-menu-networkmanager-add-hidden.png?raw=true "Adding A Hidden Network")
 
 ###### Editing A Conneciton
