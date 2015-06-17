@@ -11,11 +11,11 @@
 ###### Hidden Wireless Networks
 ![Hidden Wireless Networks](../img/corgi-openbox-menu-networkmanager-list-hidden.png?raw=true "Hidden Wireless Networks")
 
-###### Making A Conneciton
+###### Making A Connection
 ![Making A Connection](../img/corgi-openbox-menu-networkmanager-make-connection.png?raw=true "Making A Connection")
 
 ###### Adding A Hidden Network
 ![Adding A Hidden Network](../img/corgi-openbox-menu-networkmanager-add-hidden.png?raw=true "Adding A Hidden Network")
 
-###### Editing A Conneciton
+###### Editing A Connection
 ![Editing A Connection](../img/corgi-openbox-menu-networkmanager-edit-connection.png?raw=true "Editing A Connection")

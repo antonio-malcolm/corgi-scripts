@@ -2,11 +2,11 @@
 ###### Host Details
 ![Host Details](../img/corgi-openbox-menu-samba-host-details.png?raw=true "Host Details")
 
-###### Share Mount
-![Share Mount](../img/corgi-openbox-menu-samba-share-mount.png?raw=true "Share Mount")
+###### Mounting A Share
+![Mounting A Share](../img/corgi-openbox-menu-samba-share-mount.png?raw=true "Mounting A Share")
 
-###### Manual Share Mount
-![Manual Share Mount](../img/corgi-openbox-menu-samba-share-mount-manual.png?raw=true "Manual Share Mount")
+###### Mounting A Share Manually (via //ip/share)
+![Mounting A Share Manually (via //ip/share)](../img/corgi-openbox-menu-samba-share-mount-manual.png?raw=true "Mounting A Share Manually (via //ip/share)")
 
 ###### Mount Details
 ![Mount Details](../img/corgi-openbox-menu-samba-mount-details.png?raw=true "Mount Details")
