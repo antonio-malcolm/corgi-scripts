@@ -10,7 +10,7 @@
 
 # corgi-openbox-menus-samba - Generates an Openbox Pipemenu for managing a samba server, as well as connections, as a client, to samba shares, using samba and smbclient as backends.
 #
-# v2015.05.22
+# v2015.06.17
 #
 # Authored by Antonio Malcolm
 #

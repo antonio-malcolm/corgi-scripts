@@ -11,7 +11,7 @@
 # corgi-openbox-menus-samba.shlib - Functions used to generate Openbox menus and items for describing and managing a samba server, as well as connections, as a client, 
 # to other samba shares, using samba, smbclient, and udevil as backends. In the absence of udevil, this library will attempt to use mount and umount- both with and without passwordless sudo.
 #
-# v2015.05.22
+# v2015.06.17
 #
 # Authored by Antonio Malcolm
 #

@@ -11,7 +11,7 @@
 # corgi-scripts-core.shlib - The core library of variables and functions for, and shared by, the corgi family of shell-based utilities.
 # These functions can also be used by any script which sources this file.
 #
-# v2015.05.18
+# v2015.06.17
 #
 # Authored by Antonio Malcolm
 

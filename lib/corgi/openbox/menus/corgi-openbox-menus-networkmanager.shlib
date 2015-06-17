@@ -11,7 +11,7 @@
 # corgi-openbox-menus-networkmanager.shlib - Functions used to generate Openbox menus and items for describing and managing network devices and connections, 
 # using NetworkManager as a backend.
 #
-# v2015.05.18
+# v2015.06.17
 #
 # Authored by Antonio Malcolm
 #
