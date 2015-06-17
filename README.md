@@ -3,6 +3,7 @@
 Corgi Scripts is a library of executable shell scripts, reusable shell functions, and Openbox pipemenus.  
 It is authored with a focus on portability, reusability, and POSIX compliance.  
 Library functions are both semantic and well-documented.  
+Both the library functions and the Openbox menus generated from them are *highly performant, even with large sets of data*.
 
 Executables are located under *bin*  
 Library functions (used by the executables) are located under *lib*  
