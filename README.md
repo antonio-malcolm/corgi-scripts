@@ -2,11 +2,11 @@
 
 Corgi Scripts is a library of executable shell scripts, reusable shell functions, and Openbox pipemenus.  
 It is authored with a focus on portability, reusability, and POSIX compliance.  
-Library functions are both semantic and well-documented.
-  
+Library functions are both semantic and well-documented.  
+
 Executables are located under *bin*  
 Library functions (used by the executables) are located under *lib*  
-Static resources, such as icons, are located under *share*
+Static resources, such as icons, are located under *share*  
 
 Screenshots of current Openbox pipemenus can be found under **[SCREENSHOTS/openbox](SCREENSHOTS/openbox)**
 
@@ -17,12 +17,12 @@ Quick install instructions are below this greeting.
 If you want something more detailed, skip to **[Detailed Instructions](#detailed-instructions)**
 
 
-**Quick Install**
+**Quick Install**  
 
 From within the corgi-scripts directory, RUN:
 
 ```
-$ ./install.sh 
+$ ./install.sh
 ```
 
 ADD the executables, installed under /usr/local/bin, to your user's NOPASSWD list in the sudoer's file:
@@ -30,7 +30,7 @@ ADD the executables, installed under /usr/local/bin, to your user's NOPASSWD lis
 <username> ALL=(ALL) NOPASSWD: /usr/local/bin/corgi-openbox-menus-networkmanager, /usr/local/bin/corgi-openbox-menus-samba
 ```
 
-ADD Openbox pipemenus to menu.xml   
+ADD Openbox pipemenus to menu.xml  
 (Note the use of sudo as the current user- not strictly necessary, but useful when a script needs easy user info):
 
 ```
@@ -38,19 +38,20 @@ ADD Openbox pipemenus to menu.xml
 <menu id="network" label="Samba" execute="sudo -u <USERNAME> corgi-openbox-menus-samba" />
 ```
 
-<a name="detailed-instructions"></a>
+<a name="detailed-instructions"></a>  
 **Detailed Instructions:**
 
-Corgi Scripts can be installed and used in one of three ways:  
+Corgi Scripts can be installed and used in one of three ways:
 
-IDEALLY (and advised):
+
+IDEALLY (and advised):  
 
 Use the install script to copy the components, by default, to /usr/local:
 
 ```
 $ ./install.sh
 ```
-  
+
 You can set the install location using a single arg (with or without `--prefix=`) like so:
 
 ```
@@ -99,16 +100,17 @@ as well as to assign ownership of those shares (assigned by uid and gid during m
 
 Packages common to most or all:
 
+
 | Package   | Requirement                                                                                            |
-|-----------|--------------------------------------------------------------------------------------------------------| 
+|-----------|--------------------------------------------------------------------------------------------------------|
 | zenity    | for user input dialogs, error notifications, and desktop notifications (in the absence of libnotify)   |
-| libnotify | for desktop notifications (not strictly required, if you don't want notifications)                     |                          |
+| libnotify | for desktop notifications (not strictly required, if you don't want notifications)                     |               
 
 
 For corgi-openbox-menus-networkmanager.shlib:
 
 | Package    | Requirement                                                                                           |
-|------------|-------------------------------------------------------------------------------------------------------| 
+|------------|-------------------------------------------------------------------------------------------------------|
 | NetworkManager         | for which the pipemenu provides a front end and manages networking stuffs                 |
 | network-manager-applet | provides nm-connection-editor (this may be available independently from your distro)      |
 
@@ -116,7 +118,7 @@ For corgi-openbox-menus-networkmanager.shlib:
 For corgi-openbox-menus-samba.shlib:
 
 | Package    | Requirement                                                                                           |
-|------------|-------------------------------------------------------------------------------------------------------| 
+|------------|-------------------------------------------------------------------------------------------------------|
 | smbclient  | for obtaining information about local Samba hosts and shares                                          |
 | cifs-utils | for mounting Samba shares                                                                             |
-| udevil     | to mount without root permissions (or you can add mount and umount to your user's NOPASSWD list)      |  
+| udevil     | to mount without root permissions (or you can add mount and umount to your user's NOPASSWD list)      |
