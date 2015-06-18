@@ -113,7 +113,7 @@ For corgi-openbox-menus-networkmanager.shlib:
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
 | NetworkManager         | for which the pipemenu provides a front end and manages networking stuffs                 |
-| network-manager-applet | provides nm-connection-editor (this may be available independently from your distro)      |
+| nm-connection-editor   | provides the interface for editing connection profiles (sometimes packaged with network-manager-applet, though the applet package, itself, is not used by corgi)  |                                     |
 
 
 For corgi-openbox-menus-samba.shlib:
