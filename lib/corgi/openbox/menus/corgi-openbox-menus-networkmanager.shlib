@@ -1729,6 +1729,7 @@ buildWifiNetworkMenu() {
   fi
 
   ssid="`corgiObEscapeUnderscores "$ssid"`"
+  ssid="`corgiReplaceAllOccurrencesOfSubstring "$ssid" '&' '&amp;'`"
 
   mode="Mode: $mode"
   channel="Channel: $channel"
