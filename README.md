@@ -108,18 +108,26 @@ Packages common to most or all:
 | libnotify | for desktop notifications (not strictly required, if you don't want notifications)                     |               
 
 
+For corgi-openbox-menus-displays.shlib:
+
+| Package    | Requirement                                                                                           |
+|------------|-------------------------------------------------------------------------------------------------------|
+| xrandr     | for which the pipemenu provides a front end and manages screen and display stuffs                     |
+| lspci      | for obtaining information which describes graphics rendering hardware (such as GPUs)                          |  
+
+
 For corgi-openbox-menus-networkmanager.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
 | NetworkManager         | for which the pipemenu provides a front end and manages networking stuffs                 |
-| nm-connection-editor   | provides the interface for editing connection profiles (sometimes packaged with network-manager-applet, though the applet package, itself, is not used by corgi)  |                                     |
+| nm-connection-editor   | provides the interface for editing connection profiles (sometimes packaged with network-manager-applet, though the applet package, itself, is not used by corgi) |                                     |
 
 
 For corgi-openbox-menus-samba.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
-| smbclient  | for obtaining information about local Samba hosts and shares                                          |
+| smbclient  | for obtaining information which describes local Samba hosts and shares                                |
 | cifs-utils | for mounting Samba shares                                                                             |
 | udevil     | to mount without root permissions (or you can add mount and umount to your user's NOPASSWD list)      |
