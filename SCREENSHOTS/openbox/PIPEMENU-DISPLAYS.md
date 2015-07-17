@@ -1,6 +1,6 @@
 
 ###### Screens
-![Device Profiles](../img/corgi-openbox-menu-displays-screen.png?raw=true "Screens")
+![Screens](../img/corgi-openbox-menu-displays-screen.png?raw=true "Screens")
 
 ###### Devices
 ![Devices](../img/corgi-openbox-menu-displays-devices.png?raw=true "Devices")
