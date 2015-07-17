@@ -36,26 +36,25 @@ fi
 . "$corgiObMenusSambaLib"
 
 pipeMenu=''
-pipeMenuContent=''
 
 if ! command -v smbclient > /dev/null
 then
   logger "ERROR (corgi-openbox-menus-samba): smbclient command not found. Please install smbclient or the Samba package"
-  pipeMenuContent=`corgiObMenuItem "label:smbclient command requires smbclient package..."`
+  pipeMenu=`corgiObMenuItem "label:smbclient command requires smbclient package..."`
 elif ! command -v nmblookup > /dev/null
 then
   logger "ERROR (corgi-openbox-menus-samba): nmblookup command not found. Please install smbclient or the Samba package"
-  pipeMenuContent=`corgiObMenuItem "label:nmblookup command requires smbclient package..."`
+  pipeMenu=`corgiObMenuItem "label:nmblookup command requires smbclient package..."`
 else
 
-  menuId="`corgiMakeIdString "corgi-menus-samba-hosts"`"
+  menuId="`corgiMakeIdString "corgi-menus-samba-hosts-"`"
   hostMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib&quot; ; buildSambaHostMenus'"
   hostsMenu="`corgiObMenu "id:$menuId" "label:Hosts" "execute:$hostMenuCommand"`" 
 
-  pipeMenuContent="$pipeMenuContent$hostsMenu"
+  pipeMenu="$pipeMenu$hostsMenu"
 
   mountsMenu="`buildCurrentSambaMountsMenu`"
-  pipeMenuContent="$pipeMenuContent$mountsMenu"
+  pipeMenu="$pipeMenu$mountsMenu"
  
   mountByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare false'"
   mountByAddressItems="`corgiObMenuItem "label:Mount By Address" "action:Execute" "command:$mountByAddressCommand"`"
@@ -63,11 +62,11 @@ else
   mountRoByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare true'"
   mountByAddressItems="$mountByAddressItems`corgiObMenuItem "label:Mount Read-Only By Address" "action:Execute" "command:$mountRoByAddressCommand"`"
   
-  pipeMenuContent="$pipeMenuContent$mountByAddressItems"
+  pipeMenu="$pipeMenu$mountByAddressItems"
 
 fi
 
-pipeMenu="`corgiObPipeMenu "content:$pipeMenuContent"`"
+pipeMenu="`corgiObPipeMenu "content:$pipeMenu"`"
 exitStatus=$?
 
 if [ -z "$pipeMenu" ]

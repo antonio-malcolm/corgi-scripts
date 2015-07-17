@@ -25,7 +25,6 @@
 # Optional: libnotify - used for informational and success notifications
 
 
-exitStatus=1
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
@@ -35,7 +34,7 @@ if [ ! -e "$corgiObMenuLib" ]
 then
   logger "ERROR (corgi-openbox-menus-samba.shlib): The Corgi Openbox Menu library is not present. Exiting..."
   echo "ERROR (corgi-openbox-menus-samba.shlib): The Corgi Openbox Menu library is not present. Exiting..."
-  exit $exitStatus
+  exit 1
 fi
 
 . "$corgiObMenuLib"
@@ -82,7 +81,7 @@ else
 fi
 
 
-# Prompts the user with a dialog, in which they can provide the IP address and share name to mount a Samba share.
+# Prompts the user with a dialog, with which they can provide the IP address and share name to mount a Samba share.
 #
 # $1 - function, required, a callback to be invoked after the user has provided their Samba share address data
 # $2 - true or false, required, describes whether or not the Samba share should be moutned as read-only
@@ -190,11 +189,11 @@ promptUserForSambaShareAddress() {
 }
 
 
-# Prompts the user with a dialog, in which they can provide the user name and key to mount a Samba share
+# Prompts the user with a dialog, with which they can provide the user name and key to mount a Samba share
 # which requires authentication.
 #
-# $3 - string, required (may be empty), the Samba host IP address, used purely for display purposes
-# $4 - string, required (may be empty), the Samba share name, used purely for display purposes
+# $1 - string, required (may be empty), the Samba host IP address, used purely for display purposes
+# $2 - string, required (may be empty), the Samba share name, used purely for display purposes
 # $3 - function, required, a callback to be invoked after the user has provided their Samba client user name and key
 promptUserForSambaClientCredentials() {
 
@@ -296,7 +295,16 @@ buildSambaMountPointPath() {
   # to ensure limited and safe permissions- we are NOT employing passwordless sudo on mkdir!
   if ! $hasUdevil && [ "$userName" != 'root' ]
   then
+
     mountPoint="/home/$userName$mountPoint"
+    count=1
+
+    while [ -d "$mountPoint" ]
+    do
+      $mountPoint="$mountPoint-$count"
+      count=$(($count + 1))
+    done
+
   fi 
 
   echo "$mountPoint"
@@ -916,7 +924,7 @@ getSambaHostData() {
 }
 
 
-# Helper function, generates and echoes openbox menu items which describe aspects of the Samba host, 
+# Helper function, generates and echoes openbox menu items (as an XML-formatted string) which describe aspects of the Samba host, 
 # by parsing data provided by the caller. 
 # (This logic is intended to be used as a callback function for function '# getSambaHostData', 
 # and is separated in order to reduce code complexity.)
@@ -1006,7 +1014,7 @@ buildMountedSambaSharePath() {
 }
 
 
-# Helper function, generates and echoes an openbox menu which describe a Samba share and 
+# Helper function, generates and echoes an openbox menu (as an XML-formatted string) which describe a Samba share and 
 # provides the option to mount that share, by parsing data provided by the caller. 
 # (This is intended to be used as a callback function for function '# getSambaHostData', 
 # and is separated in order to reduce code complexity.)
@@ -1042,10 +1050,10 @@ buildSambaHostShareMenu() {
   then
 
     mountCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; mountSambaShare \"$ipAddress\" \"$shareName\"'"
-    mountRoCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; mountSambaShare \"$ipAddress\" \"$shareName\" true'"
-
     shareItems="`corgiObMenuItem "label:Mount" "action:Execute" "command:$mountCommand"`"
-    shareItems="$shareItems`corgiObMenuItem "label:Mount Read-Only" "action:Execute" "command:$mountRoCommand"`"
+
+    mountCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; mountSambaShare \"$ipAddress\" \"$shareName\" true'"
+    shareItems="$shareItems`corgiObMenuItem "label:Mount Read-Only" "action:Execute" "command:$mountCommand"`"
 
   else
 
@@ -1068,7 +1076,7 @@ buildSambaHostShareMenu() {
 }
 
 
-# Generates and echoes an Openbox pipe menu consisting of data which describes a Samba host.
+# Generates and echoes an Openbox pipe menu (as an XML-formatted string) consisting of data which describes a Samba host.
 # 
 # $1 - string, required, the Samba host IP address
 # $2 - string, required, describes whether or not the Samba host is a Domain Master Browser
@@ -1096,7 +1104,7 @@ buildSambaHostMenuContent() {
 
       detailItems="`corgiObMenuItem "label:IP Address: $ipAddress"`$detailItems"
       detailItems="$detailItems`corgiObMenuItem "label:Is Browsable: no"`"
-      detailItems="$detailItems`corgiObMenuItem "label:Reason: authenitcation required"`"
+      detailItems="$detailItems`corgiObMenuItem "label:Reason: authentication required"`"
       detailItems="$detailItems`corgiObMenuItem "label:Workgroup: $workgroup"`"
       detailItems="$detailItems`corgiObMenuItem "label:OS: $os"`"
       detailItems="$detailItems`corgiObMenuItem "label:Samba Version: $sambaVersion"`"
@@ -1208,7 +1216,7 @@ getHostNameFromIpAddress() {
 }
 
 
-# Generates and echoes an Openbox menu consisting of data which describes mounted Samba shares.
+# Generates and echoes an Openbox menu (as an XML-formatted string) consisting of data which describes mounted Samba shares.
 buildCurrentSambaMountsMenu() {
 
   mount -t cifs | {
@@ -1268,7 +1276,7 @@ buildCurrentSambaMountsMenu() {
 }
 
 
-# Generates and echoes an Openbox pipe menu consisting of data which describes available Samba hosts.
+# Generates and echoes an Openbox pipe menu (as an XML-formatted string) consisting of data which describes available Samba hosts.
 buildSambaHostMenus() {
 
   findsmb | {

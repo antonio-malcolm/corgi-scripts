@@ -1,0 +1,59 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-samba - Generates an Openbox Pipemenu for managing a samba server, as well as connections, as a client, to samba shares, using samba and smbclient as backends.
+#
+# v2015.06.17
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-openbox-menus-samba.shlib
+# Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
+# Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
+
+exitStatus=1
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+corgiObMenusDisplaysLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib"
+
+if [ ! -e "$corgiObMenusDisplaysLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Displays Menu library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Displays Menu library is not present. Exiting..."
+  exit $exitStatus
+fi
+
+. "$corgiObMenusDisplaysLib"
+
+pipeMenu=''
+
+if ! command -v xrandr > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-displays): xrandr command not found. Please install xrandr"
+  pipeMenu=`corgiObMenuItem "label:displays menu requires xrandr..."`
+else
+
+  pipeMenu="`buildDisplaysMenu`"
+
+fi
+
+pipeMenu="`corgiObPipeMenu "content:$pipeMenu"`"
+exitStatus=$?
+
+if [ -z "$pipeMenu" ]
+then
+  logger "ERROR (corgi-openbox-menus-displays): Unable to generate pipe menu. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays): Unable to generate pipe menu. Exiting..."
+else
+  echo "$pipeMenu"
+fi
+
+exit $exitStatus

@@ -2170,6 +2170,8 @@ buildDeviceProfilesMenu() {
     currentDeviceName=''
     currentDeviceType=''
 
+    menuIcon="$parentDirectory/share/icons/corgi/openbox/menus/chardevice.png"
+
     while read -r line
     do
 
@@ -2193,7 +2195,7 @@ buildDeviceProfilesMenu() {
 
               menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-ethernet-$currentDeviceName-"`"
               deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
-              deviceMenusEthernet="$deviceMenusEthernet`corgiObMenu "id:$menuId" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"              
+              deviceMenusEthernet="$deviceMenusEthernet`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"              
 
             ;;
 
@@ -2201,7 +2203,7 @@ buildDeviceProfilesMenu() {
 
               menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-loopback-$currentDeviceName-"`"
               deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
-              deviceMenusLoopback="$deviceMenusLoopback`corgiObMenu "id:$menuId" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
+              deviceMenusLoopback="$deviceMenusLoopback`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
 
             ;;
 
@@ -2209,7 +2211,7 @@ buildDeviceProfilesMenu() {
 
               menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-wifi-$currentDeviceName-"`"
               deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
-              deviceMenusWifi="$deviceMenusWifi`corgiObMenu "id:$menuId" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
+              deviceMenusWifi="$deviceMenusWifi`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
 
             ;;
 
@@ -2217,7 +2219,7 @@ buildDeviceProfilesMenu() {
 #
 #              menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-$currentDeviceType-$currentDeviceName-"`"
 #              deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-networkmanager.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
-#              deviceMenusWifi="$deviceMenusWifi`corgiObMenu "id:$menuId" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
+#              deviceMenusWifi="$deviceMenusWifi`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
 #
 #            ;;
 

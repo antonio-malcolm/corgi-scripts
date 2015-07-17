@@ -1,0 +1,1205 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm
+#
+# This file is part of Corgi Scripts.
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-samba.shlib - Functions used to generate Openbox menus and items for describing and managing a samba server, as well as connections, as a client, 
+# to other samba shares, using samba, smbclient, and udevil as backends. In the absence of udevil, this library will attempt to use mount and umount- both with and without passwordless sudo.
+#
+# v2015.06.17
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-openbox-menus-core.shlib
+# Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
+# Requires: xrandr - for reporting available display resolutions and making changes
+# Requires: lspci - for obtaining device information
+# Requires: zenity - if we plan on connecting to authenticated samba shares - used for entering addresses and passwords,
+#                    as well as confirmation and error prompts, as well as notifications, in the absence of notify-send
+# Optional: libnotify - used for informational and success notifications
+
+
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
+
+if [ ! -e "$corgiObMenuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-displays.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  exit 1
+fi
+
+. "$corgiObMenuLib"
+
+hasXrandr=false
+hasLspci=false
+hasZenity=false
+hasNotify=false
+
+if ! command -v xrandr > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-displays.shlib): xrandr not found. Please install xrandr"
+else 
+  hasXrandr=true
+fi
+
+if ! command -v lspci > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-displays.shlib): lspci not found. Please install lspci"
+else 
+  hasLspci=true
+fi
+
+if ! command -v zenity > /dev/null
+then
+  logger "WARN (corgi-openbox-menus-displays.shlib): zenity not found. We can't connect to secured samba shares or set custom mount points without it. Please install zenity."
+else
+  hasZenity=true
+fi
+
+if ! command -v notify-send > /dev/null
+then
+  logger "INFO (corgi-openbox-menus-displays.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
+else
+  hasNotify=true  
+fi
+
+
+# Prompts the user with a dialog, with which they can provide their desired screen DPI.
+#
+# $1 - string, required (may be empty), the name used to identifiy the screen, 
+#      for which the DPI is being set, used purely for display purposes
+promptUserForScreenDpi() {
+
+  name="$1"
+
+  zenity --forms --title="Set DPI For $name" --text="Set DPI For $name" --add-entry="DPI:" | {
+
+    response='_ZENITY-CANCEL-VALUE_'
+
+    while read -r line
+    do
+
+      # Sometimes, Gtk throws warnings to pester developers about using their APIs.
+      # This results in garbage that users of those developers' products
+      # must deal with, so we must filter it out, here...
+      if ! corgiStartsWithSubstring "$line" 'Gtk-Message'
+      then
+        response="$line"
+        break
+      fi
+
+    done
+
+    if [ "$response" = '_ZENITY-CANCEL-VALUE_' ]
+    then
+      exit 0
+    else
+ 
+      if [ -z "$response" ]
+      then
+        exit 0
+      else
+        setScreenDpi "$name" "$response"
+      fi
+
+    fi
+
+  }
+
+}
+
+
+# Prompts the user with a dialog, with which they can provide details used to set the panning for a display.
+#
+# $1 - string, required, the name used to identifiy the display for which the panning is being set
+#      for which the DPI is being set, used purely for display purposes
+# $2 - string, optional, the name used to identify the display set as primary (if one is set)
+promptUserForDisplayPanning() {
+
+  panningWidth=0
+  panningHeight=0
+  panningOffsetX=0
+  panningOffsetY=0
+  trackingWidth=0
+  trackingHeight=0
+  trackingOffsetX=0
+  trackingOffsetY=0
+  borderTop=0
+  borderBottom=0
+  borderLeft=0
+  borderRight=0
+
+  name="$1"
+  primaryName="$2"
+
+  zenity --forms --title="Set Panning For $name" --text="Set panning, tracking, and border for '$name'" \
+  --add-entry="Panning Width:" --add-entry="Panning Height:" --add-entry="Panning Offset X:" --add-entry="Panning Offset Y:" \
+  --add-entry="Tracking Width:" --add-entry="Tracking Height:" --add-entry="Tracking Offset X:" --add-entry="Tracking Offset Y:" \
+  --add-entry="Border Top:" --add-entry="Border Bottom:" --add-entry="Border Left:" --add-entry="Border Right:" | {
+
+    response='_ZENITY-CANCEL-VALUE_'
+
+    while read -r line
+    do
+
+      # Sometimes, Gtk throws warnings to pester developers about using their APIs.
+      # This results in garbage that users of those developers' products
+      # must deal with, so we must filter it out, here...
+      if ! corgiStartsWithSubstring "$line" 'Gtk-Message'
+      then
+        response="$line"
+        break
+      fi
+
+    done
+
+    if [ "$response" = '_ZENITY-CANCEL-VALUE_' ]
+    then
+      exit 0
+    else
+ 
+      if [ -z "$response" ]
+      then
+        exit 0
+      else
+
+        response="$response|"
+        count=0
+
+        while corgiHasSubstring "$response" '|'
+        do
+
+          value="`corgiFetchSubstringBefore "$response" '|' 'first'`"
+
+          if [ ! -z "$value" ]
+          then
+
+            case $count in
+              0) panningWidth=$value ;;
+              1) panningHeight=$value ;;
+              2) panningOffsetX=$value ;;
+              3) panningOffsetY=$value ;;
+              4) trackingWidth=$value ;;
+              5) trackingHeight=$value ;;
+              6) trackingOffsetX=$value ;;
+              7) trackingOffsetY=$value ;;
+              8) borderTop=$value ;;
+              9) borderBottom=$value ;;
+              10) borderLeft=$value ;;
+              11) borderRight=$value ;;
+            esac
+
+          fi 
+
+          response="`corgiFetchSubstringAfter "$response" '|' 'first'`"
+          count=$(($count + 1))
+
+        done
+
+        panning="$panningWidth"'x'"$panningHeight"'+'"$panningOffsetX"'+'"$panningOffsetY"'/'"$trackingWidth"'x'"$trackingHeight"'+'"$trackingOffsetX"'+'"$trackingOffsetY"'/'"$borderLeft"'/'"$borderTop"'/'"$borderRight"'/'"$borderBottom"
+
+        setDisplayPanning "$name" "$panning" "$primaryName"
+
+      fi
+
+      exit $?
+
+    fi
+
+    exit $?
+
+  }
+
+}
+
+
+# Prompts the user with a dialog, with which they can provide their desired display scale factor.
+#
+# $1 - string, required, the name used to identifiy the display for which the scale is being set
+promptUserForDisplayScale() {
+
+  name="$1"
+
+  zenity --forms --title="Set scale For $name" --text="Set scale For $name" --add-entry="X:" --add-entry="Y:" | {
+
+    response='_ZENITY-CANCEL-VALUE_'
+
+    while read -r line
+    do
+
+      # Sometimes, Gtk throws warnings to pester developers about using their APIs.
+      # This results in garbage that users of those developers' products
+      # must deal with, so we must filter it out, here...
+      if ! corgiStartsWithSubstring "$line" 'Gtk-Message'
+      then
+        response="$line"
+        break
+      fi
+
+    done
+
+    if [ "$response" = '_ZENITY-CANCEL-VALUE_' ]
+    then
+      exit 0
+    else
+ 
+      if [ -z "$response" ]
+      then
+        exit 0
+      else
+
+        scaleX="`corgiFetchSubstringBefore "$response" '|'`"
+        scaleY="`corgiFetchSubstringAfter "$response" '|'`"
+
+        setDisplayScale "$name" "$scaleX" "$scaleY"
+
+      fi
+
+    fi
+
+  }
+
+}
+
+
+# Generates and echoes an Openbox pipe menu (as an XML-formatted string) consisting of data which describes the available GPU hardware.
+buildDevicesMenu() {
+
+  lspci | grep 'VGA' | {
+
+    devicesMenu=''
+    itemIcon="$parentDirectory/share/icons/corgi/openbox/menus/chardevice.png"
+
+    while read -r line
+    do
+
+      if corgiHasSubstring "$line" 'controller:'
+      then
+        devicesItem="`corgiFetchSubstringAfter "$line" 'controller:'`"
+        devicesItem="`corgiTrimWhiteSpace "$devicesItem"`"
+        devicesItem="`corgiObMenuItem "icon:$itemIcon" "label:$devicesItem"`"
+        devicesMenu="$devicesMenu$devicesItem"
+      fi
+
+    done
+
+    lspci | grep '3D' | {
+
+      while read -r line
+      do
+
+        if corgiHasSubstring "$line" 'controller:'
+        then
+          devicesItem="`corgiFetchSubstringAfter "$line" 'controller:'`"
+          devicesItem="`corgiTrimWhiteSpace "$devicesItem"`"
+          devicesItem="`corgiObMenuItem "icon:$itemIcon" "label:$devicesItem"`"
+          devicesMenu="$devicesMenu$devicesItem"
+        fi
+
+      done
+
+      echo "`corgiObPipeMenu "content:$devicesMenu"`"
+      exit 0
+
+    }
+
+    exit $?
+
+  }
+
+  exit $?
+
+}
+
+
+connectionDataDelimiter=','
+
+
+# Sets the screen DPI.
+#
+# $1 - string, required (may be empty), the name used to identifiy the screen, 
+#      for which the DPI is being set, used purely for display purposes
+# $2 - number, required, the desired DPI setting
+setScreenDpi() {
+
+  name="$1"
+  dpi="$2"
+
+  xrandr --dpi $dpi 2>&1 | {
+
+    response=''
+
+    while read -r line
+    do
+      response="$line"
+      break
+    done
+
+    if [ -z "$response" ]
+    then
+      response="DPI for $name is now $dpi"
+    fi
+
+    notify-send "$response"
+    exit $?
+
+  }
+
+  exit $?  
+
+}
+
+
+# Sets the specified display as primary.
+#
+# $1 - string, required, the name used to identifiy the display being set as primary
+makeDisplayPrimary() {
+
+  name="$1"
+
+  xrandr --output $name --primary 2>&1 | {
+
+    response=''
+
+    while read -r line
+    do
+      response="$line"
+      break
+    done
+
+    if [ -z "$response" ]
+    then
+      response="Display '$name' is now primary."
+    fi
+
+    notify-send "$response"
+    exit $?
+
+  }
+
+  exit $?
+
+}
+
+
+# Changes the position of the specified display relative to the specified adjacent display.
+#
+# $1 - string, required, the name used to identifiy the display for which the position is being changed 
+# $2 - string, required, the axis on which the specified display is being moved - options are "x" and "y" (defaults to "x")
+# $3 - string, required, the desired position of the display, relative to the adjacent display - 
+#      options are "above" and "below" (used with "x" axis option), or "left" and "right" (used with "y" axis option)
+#      (defaults to "left")
+# $4 - string, required, the name used to identifiy the adjacent display, to which the positional change is relative
+# $5 - string, optional, the name used to identify the display set as primary (if one is set)
+moveDisplay() {
+
+  name="$1"
+  axis="$2"
+  orientation="$3"
+  adjacentName="$4"
+  primaryName="$5"
+
+  moveDisplayCommand="xrandr --output $name --left-of $adjacentName"
+
+  if [ "$axis" = 'y' ]
+  then
+
+    moveDisplayCommand="xrandr --output $name --above $adjacentName"
+
+    if [ "$orientation" = 'below' ]
+    then
+      moveDisplayCommand="xrandr --output $name --below $adjacentName"
+    fi
+
+  fi
+
+  if [ "$orientation" = 'right' ]
+  then
+    moveDisplayCommand="xrandr --output $name --right-of $adjacentName"
+  fi
+
+  # Prevent xrandr from segfaulting with Nvidia Optimus,
+  # which sometimes returns null when setting position of a non-primary display,
+  # when a primary is present, on multi-display setups,
+  # by temporarily swapping the primary...
+
+  if [ ! -z "$primaryName" ]
+  then
+
+    swapPrimaryCommand="xrandr --output $name --primary"
+
+    if [ "$name" = "$primaryName" ]
+    then
+      swapPrimaryCommand="xrandr --output $adjacentName --primary"  
+    fi
+
+    $swapPrimaryCommand && {
+
+      $moveDisplayCommand 2>&1 | {
+
+        response=''
+
+        while read -r line
+        do
+          response="$line"
+          break
+        done
+
+        if [ -z "$response" ]
+        then
+
+          if [ "$orientation" = 'left' ] || [ "$orientation" = 'right' ]
+          then
+            orientation="$orientation of"
+          fi
+ 
+          response="Moved display $name $orientation $adjacentName"
+
+        fi
+
+        xrandr --output $primaryName --primary
+        notify-send "$response"
+        exit $?
+
+      }
+
+    }
+
+  else
+
+    $moveDisplayCommand 2>&1 | {
+
+      response=''
+
+      while read -r line
+      do
+        response="$line"
+        break
+      done
+
+      if [ -z "$response" ]
+      then
+
+        if [ "$orientation" = 'left' ] || [ "$orientation" = 'right' ]
+        then
+          orientation="$orientation of"
+        fi
+ 
+        response="Display '$name' is now $orientation '$adjacentName'"
+
+      fi
+
+      notify-send "$response"
+      exit $?
+
+    }
+
+  fi
+
+  exit $?
+
+}
+
+
+# Sets the panning for the specified display.
+#
+# $1 - string, required, the name used to identifiy the display for which the panning is being set
+# $2 - string, required, the desired display panning
+# $3 - string, optional, the name used to identify the display set as primary (if one is set)
+setDisplayPanning() {
+
+  name="$1"
+  panning="$2"
+  primaryName="$3"
+
+  setPanningCommand="xrandr --output $name --panning $panning"
+
+  # Prevent xrandr from segfaulting with Nvidia Optimus,
+  # which sometimes returns null when setting the resolution on a non-primary display,
+  # when a primary is present, on multi-display setups,
+  # by temporarily swapping the primary...
+
+  if [ ! -z "$primaryName" ] && [ "$name" != "$primaryName" ]
+  then
+
+    xrandr --output $name --primary && {
+
+      $setPanningCommand 2>&1 | {
+
+        response=''
+
+        while read -r line
+        do
+          response="$line"
+          break
+        done
+
+        if [ -z "$response" ]
+        then
+          response="Panning for display '$name' is now $panning"
+        fi
+
+        xrandr --output $primaryName --primary
+        notify-send "$response"
+        exit $?
+
+      }
+
+    }
+
+  else
+
+    $setPanningCommand 2>&1 | {
+
+      response=''
+
+      while read -r line
+      do
+        response="$line"
+        break
+      done
+
+      if [ -z "$response" ]
+      then
+        response="Panning cleared for display '$name'"
+      fi
+
+      notify-send "$response"
+      exit $?
+
+    }
+
+  fi
+
+  exit $?
+
+}
+
+
+# Sets the resolution for the specified display.
+#
+# $1 - string, required, the name used to identifiy the display for which the resolution is being set
+# $2 - string, required, the desired display resolution
+# $3 - string, optional, the name used to identify the display set as primary (if one is set)
+setDisplayResolution() {
+
+  name="$1"
+  resolution="$2"
+  primaryName="$3"
+
+  setResolutionCommand="xrandr --output $name --mode $resolution"
+
+  # Prevent xrandr from segfaulting with Nvidia Optimus,
+  # which sometimes returns null when setting the resolution on a non-primary display,
+  # when a primary is present, on multi-display setups,
+  # by temporarily swapping the primary...
+
+  if [ ! -z "$primaryName" ] && [ "$name" != "$primaryName" ]
+  then
+
+    xrandr --output $name --primary && {
+
+      $setResolutionCommand 2>&1 | {
+
+        response=''
+
+        while read -r line
+        do
+          response="$line"
+          break
+        done
+
+        if [ -z "$response" ]
+        then
+          response="Resolution for display '$name' is now $resolution"
+        fi
+
+        xrandr --output $primaryName --primary
+        notify-send "$response"
+        exit $?
+
+      }
+
+    }
+
+  else
+
+    $setResolutionCommand 2>&1 | {
+
+      response=''
+
+      while read -r line
+      do
+        response="$line"
+        break
+      done
+
+      if [ -z "$response" ]
+      then
+        response="Resolution for display '$name' is now $resolution"
+      fi
+
+      notify-send "$response"
+      exit $?
+
+    } 
+
+  fi
+
+  exit $?
+
+}
+
+
+# Sets the scale factor for the specified display.
+#
+# $1 - string, required, the name used to identifiy the display for which the scale is being set
+# $2 - string, required, the horizontal scale factor
+# $3 - string, required, the vertical scale factor
+setDisplayScale() {
+
+  scale='1x1'
+
+  name="$1"
+  scaleX="$2"
+  scaleY="$3"
+
+  if [ -z "$scaleY" ]
+  then
+    scaleY="$scaleX"
+  fi
+
+  scale="$scaleX"'x'"$scaleY"
+
+  xrandr --output $name --scale $scale 2>&1 | {
+
+    response=''
+
+    while read -r line
+    do
+      response="$line"
+      break
+    done
+
+    if [ -z "$response" ]
+    then
+      response="Scale for dsiplay '$name' is now $scale"
+    fi
+
+    notify-send "$response"
+    exit $?
+
+  }
+
+  exit $?  
+
+}
+
+
+# Generates and echoes Openbox menus (as an XML-formatted string) which permit the manipulation of display positions.
+#
+# $1 - string, required, the name of the display being moved to another position
+# $2 - string, required, the names of all displays present, positioned in relation to the display being moved
+# $3 - string, optional, the name of the display designated as primary (if any) 
+buildConnectionMoveMenus() {
+
+  moveAboveItems=''
+  moveBelowItems=''
+  moveLeftItems=''
+  moveRightItems=''
+  moveMenus=''
+
+  name="$1"
+  names="$2"
+  primaryName="$3"
+
+  while corgiHasSubstring "$names" $connectionDataDelimiter
+  do
+
+    nextName="`corgiFetchSubstringBefore "$names" $connectionDataDelimiter 'first'`"   
+
+    if [ "$nextName" != "$name" ]
+    then  
+
+      moveCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; moveDisplay \"$name\" \"y\" \"above\" \"$nextName\" \"$primaryName\"'"
+      moveAboveItems="$moveAboveItems`corgiObMenuItem "label:$nextName" "action:Execute" "command:$moveCommand"`" 
+
+      moveCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; moveDisplay \"$name\" \"y\" \"below\" \"$nextName\" \"$primaryName\"'"
+      moveBelowItems="$moveBelowItems`corgiObMenuItem "label:$nextName" "action:Execute" "command:$moveCommand"`" 
+
+      moveCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; moveDisplay \"$name\" \"x\" \"left\" \"$nextName\" \"$primaryName\"'"
+      moveLeftItems="$moveLeftItems`corgiObMenuItem "label:$nextName" "action:Execute" "command:$moveCommand"`" 
+
+      moveCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; moveDisplay \"$name\" \"x\" \"right\" \"$nextName\" \"$primaryName\"'"
+      moveRightItems="$moveRightItems`corgiObMenuItem "label:$nextName" "action:Execute" "command:$moveCommand"`" 
+
+    fi
+
+    names="`corgiFetchSubstringAfter "$names" $connectionDataDelimiter 'first'`"
+
+  done
+
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-move-above-"`"
+  moveMenus="$moveMenus`corgiObMenu "id:$menuId" "label:Above" "content:$moveAboveItems"`"
+
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-move-below-"`"
+  moveMenus="$moveMenus`corgiObMenu "id:$menuId" "label:Below" "content:$moveBelowItems"`"
+
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-move-left-"`"
+  moveMenus="$moveMenus`corgiObMenu "id:$menuId" "label:Left Of" "content:$moveLeftItems"`"
+
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-move-right-"`"
+  moveMenus="$moveMenus`corgiObMenu "id:$menuId" "label:Right Of" "content:$moveRightItems"`"
+
+  moveMenus="`corgiObPipeMenu "content:$moveMenus"`"
+
+  echo "$moveMenus"
+  exit $?
+
+}
+
+
+# Generates and echoes an Openbox menu (as an XML-formatted string) containing submenus and items which describe,
+# as well as allow the manipulation of, an active display connection.
+#
+# $1 - string, required, the name of the display connection for which the menu is being generated
+# $2 - string, required, the names of all display connections present
+# $3 - string, required, the display resolutions available to the display connection
+# $4 - string, required, details which describe the display connection
+# $5 - string, required, the display resolutions available to the display connection, in "easy-reading" format
+# $6 - string, optional, the name of the display connection designated as primary (if any) 
+buildConnectionMenu() {
+
+  detailsMenu=''
+  supportedResMenu=''
+  clearPanningItem=''
+  makePrimaryItem=''
+  moveMenu=''
+
+  name="$1"
+  names="$2"
+  supportedResolutions="$3" 
+  detailLabels="$4"
+  supportedResolutionLabels="$5" 
+  primaryName="$6"
+
+  if [ ! -z "$names" ]
+  then
+
+    names="`corgiRemoveAllOccurrencesOfSubstring "$names" ' '`"
+    hasPanning=false
+    isPrimary=false
+
+    if corgiHasSubstring "$name" '(primary)'
+    then
+      name="`corgiFetchSubstringBefore "$name" '(primary)'`"
+      name="`corgiRemoveAllOccurrencesOfSubstring "$name" ' '`"
+      isPrimary=true
+    fi 
+
+    if [ ! -z "$detailLabels" ]          
+    then
+
+      while corgiHasSubstring "$detailLabels" $connectionDataDelimiter
+      do
+
+        detail="`corgiFetchSubstringBefore "$detailLabels" $connectionDataDelimiter 'first'`"
+
+        if corgiHasSubstring "$detail" 'Panning'
+        then
+
+          panning="`corgiFetchSubstringAfter "$detail" 'Panning:'`"
+          panning="`corgiTrimWhiteSpace "$panning"`"
+
+          if [ "$panning" != '0' ]
+          then
+            hasPanning=true
+          fi
+
+        fi 
+
+        detailsMenu="$detailsMenu`corgiObMenuItem "label:$detail"`"
+        detailLabels="`corgiFetchSubstringAfter "$detailLabels" $connectionDataDelimiter 'first'`"
+
+      done
+
+      menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-details-"`"
+      detailsMenu="`corgiObMenu "id:$menuId" "label:Details" "content:$detailsMenu"`"
+
+    fi
+
+    if [ ! -z "$supportedResolutions" ]          
+    then
+
+      while corgiHasSubstring "$supportedResolutionLabels" $connectionDataDelimiter
+      do
+
+        resolution="`corgiFetchSubstringBefore "$supportedResolutions" $connectionDataDelimiter 'first'`"
+        resolutionLabel="`corgiFetchSubstringBefore "$supportedResolutionLabels" $connectionDataDelimiter 'first'`"
+
+        setResolutionCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayResolution \"$name\" \"$resolution\" \"$primaryName\"'"
+        supportedResMenu="$supportedResMenu`corgiObMenuItem "label:$resolutionLabel" "action:Execute" "command:$setResolutionCommand"`"
+
+        supportedResolutions="`corgiFetchSubstringAfter "$supportedResolutions" $connectionDataDelimiter 'first'`"
+        supportedResolutionLabels="`corgiFetchSubstringAfter "$supportedResolutionLabels" $connectionDataDelimiter 'first'`"
+
+      done
+
+      menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-resolutions-"`"
+      supportedResMenu="`corgiObMenu "id:$menuId" "label:Set Resolution" "content:$supportedResMenu"`"
+
+    fi
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 0.8'"
+    scaleItems="`corgiObMenuItem "label:0.8" "action:Execute" "command:$setScaleCommand"`"   
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 0.9'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:0.9" "action:Execute" "command:$setScaleCommand"`"   
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.0'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.0" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.1'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.1" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.2'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.2" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.3'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.3" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.4'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.4" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.5'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.5" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.6'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:1.6" "action:Execute" "command:$setScaleCommand"`"
+
+    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForDisplayScale \"$name\"'"
+    scaleItems="$scaleItems`corgiObMenuItem "label:Arbitrary" "action:Execute" "command:$setScaleCommand"`"
+
+    menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-scale-"`"
+    scaleMenu="`corgiObMenu "id:$menuId" "label:Set Scale" "content:$scaleItems"`"
+
+    setPanningCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForDisplayPanning \"$name\" \"$primaryName\"'"
+    setPanningItem="`corgiObMenuItem "label:Set Panning" "action:Execute" "command:$setPanningCommand"`"
+
+    if $hasPanning
+    then
+      clearPanningCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayPanning \"$name\" \"0x0\" \"$primaryName\"'"
+      clearPanningItem="`corgiObMenuItem "label:Clear Panning" "action:Execute" "command:$clearPanningCommand"`"
+    fi
+
+    if ! $isPrimary
+    then
+      makePrimaryCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; makeDisplayPrimary \"$name\"'"
+      makePrimaryItem="`corgiObMenuItem "label:Make Primary" "action:Execute" "command:$makePrimaryCommand"`"
+    fi
+
+    if corgiHasSubstring "$names" $connectionDataDelimiter && [ ! -z "`corgiFetchSubstringAfter "$names" ',' 'first'`" ]
+    then
+      menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-move-"`"
+      moveMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib&quot; ; buildConnectionMoveMenus &quot;$name&quot; &quot;$names&quot; &quot;$primaryName&quot;'"
+      moveMenu="`corgiObMenu "id:$menuId" "label:Move" "execute:$moveMenuCommand"`"
+    fi
+
+  fi
+  
+  echo "`corgiObPipeMenu "content:$detailsMenu$supportedResMenu$scaleMenu$setPanningItem$clearPanningItem$makePrimaryItem$moveMenu"`"
+  exit $?
+
+}
+
+
+# Appends an Openbox menu containing submenus and items which describe,
+# as well as allow the manipulation of, an active display connection, to already-generated menus.
+#
+# $1 - string, required (may be empty), the menus currently generated
+# $2 - string, required, the name of the display connection for which the menu is being generated
+# $3 - string, required, the names of all display connections present
+# $4 - string, required, the display resolutions available to the display connection
+# $5 - string, required, details which describe the display connection
+# $6 - string, required, the display resolutions available to the display connection, in "easy-reading" format
+# $7 - string, optional, the name of the display connection designated as primary (if any) 
+appendConnectionMenus() {
+
+  menus="$1"
+  name="$2"
+  names="$3"
+  supportedResolutions="$4" 
+  detailLabels="$5" 
+  supportedResolutionLabels="$6"
+  primaryName="$7"
+
+  if corgiHasSubstring "$name" ' (primary)'
+  then
+    menuId="$primaryName"
+  else
+    menuId="$name"
+  fi
+
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$menuId-"`"
+  menuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib&quot; ; buildConnectionMenu &quot;$name&quot; &quot;$names&quot; &quot;$supportedResolutions&quot; &quot;$detailLabels&quot; &quot;$supportedResolutionLabels&quot; &quot;$primaryName&quot;'"
+  menuIcon="$parentDirectory/share/icons/corgi/openbox/menus/displays/display.png"
+
+  echo "$menus`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$name" "execute:$menuCommand"`"
+  exit $?
+
+}
+
+
+# Generates and echoes an Openbox pipe menu consisting of data which describes available GPU hardware, 
+# X screens, display connections, and xrandr options available for the manipulation of available screens and connections.
+buildDisplaysMenu() {
+
+  xrandr --query | {
+
+    connectionNames=''
+    primaryConnectionName=''
+
+    while read -r line
+    do
+
+      if ! corgiHasSubstring "$line" 'disconnected' && corgiHasSubstring "$line" 'connected'
+      then
+
+        connectionName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+        connectionNames="$connectionNames$connectionName$connectionDataDelimiter"
+
+        if corgiHasSubstring "$line" 'primary'
+        then
+          primaryConnectionName="$connectionName"
+        fi
+
+      fi
+
+    done
+
+    xrandr --query | {
+
+      displaysMenu=''
+      screenMenus=''
+      connectionMenus=''
+      inactiveConnectionsMenu=''
+
+      activeScreenRes=''
+      connectionName=''
+      connectionSupportedResolutions=''
+      connectionDetailLabels=''
+      connectionSupportedReolutionLabels=''
+
+      while read -r line
+      do
+
+        if corgiStartsWithSubstring "$line" 'Screen'
+        then
+
+          screenName="`corgiFetchSubstringBefore "$line" ':' 'first'`"
+        
+          activeScreenRes="`corgiFetchSubstringBetween "$line" 'current ' ',' 'inner'`"
+          activeScreenRes="`corgiReplaceAllOccurrencesOfSubstring "$activeScreenRes" ' x ' 'x'`"
+
+          minScreenRes="`corgiFetchSubstringBetween "$line" 'minimum ' ',' 'inner'`"
+          minScreenRes="`corgiReplaceAllOccurrencesOfSubstring "$minScreenRes" ' x ' 'x'`"
+
+          maxScreenRes="`corgiFetchSubstringBetween "$line" 'maximum ' ',' 'inner'`"
+          maxScreenRes="`corgiReplaceAllOccurrencesOfSubstring "$maxScreenRes" ' x ' 'x'`"       
+
+          screenMenuItems="`corgiObMenuItem "label:Active Resolution: $activeScreenRes"`"
+          screenMenuItems="$screenMenuItems`corgiObMenuItem "label:Minimum Resolution: $minScreenRes"`"
+          screenMenuItems="$screenMenuItems`corgiObMenuItem "label:Maximum Resolution: $maxScreenRes"`"
+  
+          screenNameId="`corgiReplaceAllOccurrencesOfSubstring "$screenName" ' ' '-'`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 80'"
+          screenDpiItems="`corgiObMenuItem "label:80" "action:Execute" "command:$setScreenDpiCommand"`"   
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 90'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:90" "action:Execute" "command:$setScreenDpiCommand"`"   
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 100'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:100" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 110'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:110" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 120'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:120" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 130'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:130" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 140'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:140" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 150'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:150" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setScreenDpi \"$screenName\" 160'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:160" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          setScreenDpiCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForScreenDpi \"$screenName\"'"
+          screenDpiItems="$screenDpiItems`corgiObMenuItem "label:Arbitrary" "action:Execute" "command:$setScreenDpiCommand"`"
+
+          menuId="`corgiMakeIdString "corgi-menus-displays-screens-$screenNameId-dpi-"`"
+          screenDpiMenu="`corgiObMenu "id:$menuId" "label:Set DPI" "content:$screenDpiItems"`"
+
+          menuId="`corgiMakeIdString "corgi-menus-displays-screens-$screenNameId-"`"
+          menuIcon="$parentDirectory/share/icons/corgi/openbox/menus/displays/display.png"
+          screenMenus="`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$screenName" "content:$screenMenuItems$screenDpiMenu"`"
+
+        elif corgiHasSubstring "$line" 'disconnected'
+        then
+
+          if [ ! -z "$connectionName" ]
+          then
+            connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$primaryConnectionName"`"
+            connectionName=''
+          fi
+
+          inactiveConnectionName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+          inactiveConnectionsMenu="$inactiveConnectionsMenu`corgiObMenuItem "label:$inactiveConnectionName"`"
+
+        elif ! corgiHasSubstring "$line" 'disconnected' && corgiHasSubstring "$line" 'connected'
+        then
+
+          if [ ! -z "$connectionName" ]
+          then
+            connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$primaryConnectionName"`"
+            connectionName=''
+          fi        
+
+          connectionName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+
+          line="`corgiFetchSubstringAfter "$line" 'connected'`"
+          line="`corgiTrimWhiteSpace "$line"`"
+
+          if corgiHasSubstring "$line" 'primary'
+          then
+
+            connectionName="$connectionName (primary)"  
+
+            line="`corgiFetchSubstringAfter "$line" 'primary'`"
+            line="`corgiTrimWhiteSpace "$line"`"
+
+          fi
+
+          activeConnectionRes="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+          connectionPosition="`corgiFetchSubstringAfter "$activeConnectionRes" '+' 'first'`"
+          activeConnectionRes="`corgiFetchSubstringBefore "$activeConnectionRes" '+' 'first'`"
+
+          line="`corgiFetchSubstringAfter "$line" "$activeConnectionRes"`"
+          line="`corgiTrimWhiteSpace "$line"`"
+
+          panning=0
+
+          if corgiHasSubstring "$line" 'panning'
+          then
+            panning="`corgiFetchSubstringAfter "$line" 'panning '`"
+            panning="`corgiFetchSubstringBefore "$panning" ' ' 'first'`"
+          fi
+
+          connectionDetailLabels="Panning: $panning$connectionDataDelimiter"
+
+          tracking=0
+
+          if corgiHasSubstring "$line" 'tracking'
+          then
+            tracking="`corgiFetchSubstringAfter "$line" 'tracking '`"
+            tracking="`corgiFetchSubstringBefore "$tracking" ' ' 'first'`"
+          fi
+
+          connectionDetailLabels="$connectionDetailLabels"'Tracking: '"$tracking$connectionDataDelimiter"
+
+          border=0
+
+          if corgiHasSubstring "$line" 'border'
+          then
+            border="`corgiFetchSubstringAfter "$line" 'border '`"
+            border="`corgiFetchSubstringBefore "$border" ' ' 'first'`"
+          fi
+
+          connectionDetailLabels="$connectionDetailLabels"'Border: '"$border$connectionDataDelimiter"
+          connectionDetailLabels="$connectionDetailLabels"'Offset X: '"`corgiFetchSubstringBefore "$connectionPosition" '+'`$connectionDataDelimiter"
+          connectionDetailLabels="$connectionDetailLabels"'Offset Y: '"`corgiFetchSubstringAfter "$connectionPosition" '+'`$connectionDataDelimiter"
+  
+          connectionSupportedResolutions=''
+          connectionSupportedResolutionLabels=''
+
+        else
+
+          connectionSupportedRes="`corgiTrimWhiteSpace "$line"`"
+          connectionSupportedRes="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+
+          line="`corgiFetchSubstringAfter "$line" "$connectionSupportedRes"`"
+          line="`corgiTrimWhiteSpace "$line"`"
+
+          hz="`corgiFetchSubstringBefore "$line" '.' 'first'`Hz"
+          connectionSupportedResLabel="$connectionSupportedRes @ $hz"
+
+          line="`corgiFetchSubstringAfter "$line" "$hz" 'first'`"
+          line="`corgiTrimWhiteSpace "$line"`"
+
+          if corgiHasSubstring "$line" '*' && corgiHasSubstring "$line" '+'
+          then
+            connectionDetailLabels="Active Resolution: $connectionSupportedResLabel (preferred)$connectionDataDelimiter$connectionDetailLabels"
+            connectionSupportedResLabel="$connectionSupportedResLabel (active) (preferred)"
+          elif corgiHasSubstring "$line" '*'
+          then
+            connectionDetailLabels="Active Resolution: $connectionSupportedResLabel$connectionDataDelimiter$connectionDetailLabels"
+            connectionSupportedResLabel="$connectionSupportedResLabel (active)"
+          elif corgiHasSubstring "$line" '+'
+          then
+            connectionSupportedResLabel="$connectionSupportedResLabel (preferred)"
+          fi
+
+          connectionSupportedResolutions="$connectionSupportedResolutions$connectionSupportedRes$connectionDataDelimiter"
+          connectionSupportedResolutionLabels="$connectionSupportedResolutionLabels$connectionSupportedResLabel$connectionDataDelimiter"
+
+        fi
+
+      done
+
+      if [ ! -z "$connectionName" ]
+      then
+        connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$primaryConnectionName"`"
+      fi  
+
+      menuId="`corgiMakeIdString "corgi-menus-displays-screens-"`"
+      screenMenus="`corgiObMenu "id:$menuId" "label:Screens" "content:$screenMenus"`"
+
+      menuId="`corgiMakeIdString "corgi-menus-displays-devices-"`"
+      devicesMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib&quot; ; buildDevicesMenu'"
+      devicesMenu="`corgiObMenu "id:$menuId" "label:Devices" "execute:$devicesMenuCommand"`"
+
+      if [ ! -z "$inactiveConnectionsMenu" ]
+      then
+        menuId="`corgiMakeIdString "corgi-menus-displays-connections-inactive-"`"
+        inactiveConnectionsMenu="`corgiObMenu "id:$menuId" "label:Inactive" "content:$inactiveConnectionsMenu"`"
+      fi
+
+      menuId="`corgiMakeIdString "corgi-menus-displays-connections-"`"
+      connectionMenus="`corgiObMenu "id:$menuId" "label:Connections" "content:$connectionMenus$inactiveConnectionsMenu"`"
+
+      detectConnectionsItem="`corgiObMenuItem "label:Detect Connections" "action:Execute" "command:xrandr --auto"`"
+
+      echo "$screenMenus$devicesMenu$connectionMenus$detectConnectionsItem"
+      exit 0  
+
+    }
+
+  }
+
+  exit $?
+
+}
