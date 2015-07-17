@@ -14,6 +14,9 @@
 ###### Connection Scale
 ![Connection Scale](../img/corgi-openbox-menu-displays-connection-scale.png?raw=true "Connection Scale")
 
+###### Connection Panning
+![Connection Panning](../img/corgi-openbox-menu-displays-connection-panning.png?raw=true "Connection Panning")
+
 ###### Move Connection
 ![Move Connection](../img/corgi-openbox-menu-displays-connection-move.png?raw=true "Move Connection")
 
