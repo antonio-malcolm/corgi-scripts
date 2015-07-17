@@ -8,10 +8,9 @@
 # If a copy of the MPL was not distributed with this file, 
 # you can obtain one at http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-samba.shlib - Functions used to generate Openbox menus and items for describing and managing a samba server, as well as connections, as a client, 
-# to other samba shares, using samba, smbclient, and udevil as backends. In the absence of udevil, this library will attempt to use mount and umount- both with and without passwordless sudo.
+# corgi-openbox-menus-displays.shlib - Functions used to generate Openbox menus and items for describing and managing X screens and display connections, using xrandr and lspci as backends.
 #
-# v2015.06.17
+# v2015.07.17
 #
 # Authored by Antonio Malcolm
 #
@@ -19,8 +18,7 @@
 # Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
 # Requires: xrandr - for reporting available display resolutions and making changes
 # Requires: lspci - for obtaining device information
-# Requires: zenity - if we plan on connecting to authenticated samba shares - used for entering addresses and passwords,
-#                    as well as confirmation and error prompts, as well as notifications, in the absence of notify-send
+# Requires: zenity - if we plan on setting values for scale, DPI, and panning, tracking and borders
 # Optional: libnotify - used for informational and success notifications
 
 
