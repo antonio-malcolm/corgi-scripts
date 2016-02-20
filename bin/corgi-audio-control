@@ -1,0 +1,46 @@
+corgiUpdateVolume() {
+
+  audioHandler=amixer
+  option="$1"
+
+  case "$option" in
+
+    'up') $audioHandler 'sset' 'Master' '5%+' ;;
+    'down') $audioHandler 'sset' 'Master' '5%-' ;;
+
+    'mute')
+
+      $audioHandler 'sget' 'Master' | {
+      
+        muteDirective='unmute'
+
+        while read -r line
+        do
+
+          case "$line" in 
+
+            *'[on]'*)
+              muteDirective='mute'
+              break
+            ;;
+
+            *'[off]'*)
+              muteDirective='unmute'
+              break
+            ;;
+
+          esac
+
+        done
+
+        $audioHandler 'sset' 'Master' "$muteDirective"
+
+      }
+
+    ;;
+
+  esac
+
+}
+
+(corgiUpdateVolume "$@")

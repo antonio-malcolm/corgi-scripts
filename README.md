@@ -20,10 +20,10 @@ If you want something more detailed, skip to **[Detailed Instructions](#detailed
 
 **Quick Install**  
 
-From within the corgi-scripts directory, RUN:
+From within the corgi-scripts directory, RUN (installs to /usr/local, by default):
 
 ```
-$ ./install.sh
+# ./install.sh
 ```
 
 ADD the executables, installed under /usr/local/bin, to your user's NOPASSWD list in the sudoer's file:
@@ -50,7 +50,7 @@ IDEALLY (and advised):
 Use the install script to copy the components, by default, to /usr/local:
 
 ```
-$ ./install.sh
+# ./install.sh
 ```
 
 You can set the install location using a single arg (with or without `--prefix=`) like so:
@@ -78,7 +78,7 @@ Likewise, root permissions would be required to run the executable components, f
 With sudo installed, you'd add the executables to the NOPASSWD list for your user, in the sudoers file, like so:
 
 ```
-$ visudo
+# visudo
 <USERNAME> ALL=(ALL) NOPASSWD: /usr/local/bin/corgi-openbox-menus-networkmanager, /usr/local/bin/corgi-openbox-menus-samba
 ```
 

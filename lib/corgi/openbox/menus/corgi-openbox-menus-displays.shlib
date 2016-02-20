@@ -1,12 +1,16 @@
 #!/bin/sh
 
-# Copyright 2015 Antonio Malcolm
+# Copyright 2015 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
 #
-# This file is part of Corgi Scripts.
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
 #
 # Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
 # If a copy of the MPL was not distributed with this file, 
 # you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
 # corgi-openbox-menus-displays.shlib - Functions used to generate Openbox menus and items for describing and managing X screens and display connections, using xrandr and lspci as backends.
 #
@@ -15,7 +19,7 @@
 # Authored by Antonio Malcolm
 #
 # Requires: corgi-openbox-menus-core.shlib
-# Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
 # Requires: xrandr - for reporting available display resolutions and making changes
 # Requires: lspci - for obtaining device information
 # Requires: zenity - if we plan on setting values for scale, DPI, and panning, tracking and borders
@@ -26,6 +30,7 @@ currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
 corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
+corgiDisplaysManagementLib="$parentDirectory/lib/corgi/corgi-displays-management.shlib"
 
 if [ ! -e "$corgiObMenuLib" ]
 then
@@ -34,7 +39,15 @@ then
   exit 1
 fi
 
+if [ ! -e "$corgiDisplaysManagementLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-displays.shlib): The Corgi Displays Management library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays.shlib): The Corgi Displays Management library is not present. Exiting..."
+  exit 1
+fi
+
 . "$corgiObMenuLib"
+. "$corgiDisplaysManagementLib"
 
 hasXrandr=false
 hasLspci=false
@@ -702,6 +715,57 @@ setDisplayScale() {
 }
 
 
+# Generates and echoes an Openbox menus (as an XML-formatted string) which permits the manipulation of display brightness.
+#
+# $1 - string, required, the name of the interface which is used to set the display brightness
+buildConnectionBrightnessMenu() {
+
+  interface="$1"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"up\" \"$interface\"'"
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:Higher" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"down\" \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:Lower" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 10 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:10%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 20 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:20%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 30 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:30%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 40 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:40%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 50 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:50%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 60 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:60%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 70 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:70%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 80 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:80%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 90 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:90%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  setBrightnessCommand="sudo corgi-display-brightness-control \"percentage\" 100 \"$interface\""
+  setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:100%" "action:Execute" "command:$setBrightnessCommand"`"
+  
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-brightness-"`"
+  echo "`corgiObMenu "id:$menuId" "label:Set Brightness" "content:$setBrightnessItems"`"
+  
+  exit $?
+
+}
+
+
 # Generates and echoes Openbox menus (as an XML-formatted string) which permit the manipulation of display positions.
 #
 # $1 - string, required, the name of the display being moved to another position
@@ -757,9 +821,53 @@ buildConnectionMoveMenus() {
   menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-move-right-"`"
   moveMenus="$moveMenus`corgiObMenu "id:$menuId" "label:Right Of" "content:$moveRightItems"`"
 
-  moveMenus="`corgiObPipeMenu "content:$moveMenus"`"
+  echo "`corgiObPipeMenu "content:$moveMenus"`"
+  
+  exit $?
 
-  echo "$moveMenus"
+}
+
+
+# Generates and echoes an Openbox menus (as an XML-formatted string) which permits the manipulation of display scale.
+#
+# $1 - string, required, the name of the display for which scale is being set
+buildConnectionScaleMenu() {
+
+  name="$1"
+  
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 0.8'"
+  scaleItems="`corgiObMenuItem "label:0.8" "action:Execute" "command:$setScaleCommand"`"   
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 0.9'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:0.9" "action:Execute" "command:$setScaleCommand"`"   
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.0'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.0" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.1'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.1" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.2'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.2" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.3'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.3" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.4'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.4" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.5'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.5" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.6'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:1.6" "action:Execute" "command:$setScaleCommand"`"
+
+  setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForDisplayScale \"$name\"'"
+  scaleItems="$scaleItems`corgiObMenuItem "label:Arbitrary" "action:Execute" "command:$setScaleCommand"`"
+
+  menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-scale-"`"
+  echo "`corgiObMenu "id:$menuId" "label:Set Scale" "content:$scaleItems"`"
+  
   exit $?
 
 }
@@ -778,16 +886,19 @@ buildConnectionMenu() {
 
   detailsMenu=''
   supportedResMenu=''
+  setPanningItem=''
   clearPanningItem=''
   makePrimaryItem=''
   moveMenu=''
+  brightnessMenu=''
 
   name="$1"
   names="$2"
   supportedResolutions="$3" 
   detailLabels="$4"
-  supportedResolutionLabels="$5" 
-  primaryName="$6"
+  supportedResolutionLabels="$5"
+  brightnessInterface="$6" 
+  primaryName="$7"
 
   if [ ! -z "$names" ]
   then
@@ -801,7 +912,7 @@ buildConnectionMenu() {
       name="`corgiFetchSubstringBefore "$name" '(primary)'`"
       name="`corgiRemoveAllOccurrencesOfSubstring "$name" ' '`"
       isPrimary=true
-    fi 
+    fi
 
     if [ ! -z "$detailLabels" ]          
     then
@@ -855,50 +966,24 @@ buildConnectionMenu() {
       supportedResMenu="`corgiObMenu "id:$menuId" "label:Set Resolution" "content:$supportedResMenu"`"
 
     fi
+    
+    scaleMenu="`buildConnectionScaleMenu \"$name\"`"
 
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 0.8'"
-    scaleItems="`corgiObMenuItem "label:0.8" "action:Execute" "command:$setScaleCommand"`"   
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 0.9'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:0.9" "action:Execute" "command:$setScaleCommand"`"   
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.0'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.0" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.1'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.1" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.2'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.2" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.3'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.3" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.4'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.4" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.5'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.5" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayScale \"$name\" 1.6'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:1.6" "action:Execute" "command:$setScaleCommand"`"
-
-    setScaleCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForDisplayScale \"$name\"'"
-    scaleItems="$scaleItems`corgiObMenuItem "label:Arbitrary" "action:Execute" "command:$setScaleCommand"`"
-
-    menuId="`corgiMakeIdString "corgi-menus-displays-connections-$name-scale-"`"
-    scaleMenu="`corgiObMenu "id:$menuId" "label:Set Scale" "content:$scaleItems"`"
-
-    setPanningCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForDisplayPanning \"$name\" \"$primaryName\"'"
-    setPanningItem="`corgiObMenuItem "label:Set Panning" "action:Execute" "command:$setPanningCommand"`"
-
-    if $hasPanning
+    if connectionSupportsPanning "$name"
     then
-      clearPanningCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayPanning \"$name\" \"0x0\" \"$primaryName\"'"
-      clearPanningItem="`corgiObMenuItem "label:Clear Panning" "action:Execute" "command:$clearPanningCommand"`"
+
+      setPanningCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; promptUserForDisplayPanning \"$name\" \"$primaryName\"'"
+      setPanningItem="`corgiObMenuItem "label:Set Panning" "action:Execute" "command:$setPanningCommand"`"
+
+      if [ $hasPanning = true ]
+      then
+        clearPanningCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; setDisplayPanning \"$name\" \"0x0\" \"$primaryName\"'"
+        clearPanningItem="`corgiObMenuItem "label:Clear Panning" "action:Execute" "command:$clearPanningCommand"`"
+      fi
+
     fi
 
-    if ! $isPrimary
+    if [ $isPrimary = false ]
     then
       makePrimaryCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib\" ; makeDisplayPrimary \"$name\"'"
       makePrimaryItem="`corgiObMenuItem "label:Make Primary" "action:Execute" "command:$makePrimaryCommand"`"
@@ -910,10 +995,15 @@ buildConnectionMenu() {
       moveMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib&quot; ; buildConnectionMoveMenus &quot;$name&quot; &quot;$names&quot; &quot;$primaryName&quot;'"
       moveMenu="`corgiObMenu "id:$menuId" "label:Move" "execute:$moveMenuCommand"`"
     fi
+    
+    if [ ! -z "$brightnessInterface" ]
+    then
+      brightnessMenu="`buildConnectionBrightnessMenu \"$brightnessInterface\"`"
+    fi
 
   fi
   
-  echo "`corgiObPipeMenu "content:$detailsMenu$supportedResMenu$scaleMenu$setPanningItem$clearPanningItem$makePrimaryItem$moveMenu"`"
+  echo "`corgiObPipeMenu "content:$detailsMenu$supportedResMenu$scaleMenu$setPanningItem$clearPanningItem$makePrimaryItem$moveMenu$brightnessMenu"`"
   exit $?
 
 }
@@ -937,7 +1027,8 @@ appendConnectionMenus() {
   supportedResolutions="$4" 
   detailLabels="$5" 
   supportedResolutionLabels="$6"
-  primaryName="$7"
+  brightnessInterface="$7"
+  primaryName="$8"
 
   if corgiHasSubstring "$name" ' (primary)'
   then
@@ -947,7 +1038,7 @@ appendConnectionMenus() {
   fi
 
   menuId="`corgiMakeIdString "corgi-menus-displays-connections-$menuId-"`"
-  menuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib&quot; ; buildConnectionMenu &quot;$name&quot; &quot;$names&quot; &quot;$supportedResolutions&quot; &quot;$detailLabels&quot; &quot;$supportedResolutionLabels&quot; &quot;$primaryName&quot;'"
+  menuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-displays.shlib&quot; ; buildConnectionMenu &quot;$name&quot; &quot;$names&quot; &quot;$supportedResolutions&quot; &quot;$detailLabels&quot; &quot;$supportedResolutionLabels&quot; &quot;$brightnessInterface&quot; &quot;$primaryName&quot;'"
   menuIcon="$parentDirectory/share/icons/corgi/openbox/menus/displays/display.png"
 
   echo "$menus`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$name" "execute:$menuCommand"`"
@@ -959,6 +1050,14 @@ appendConnectionMenus() {
 # Generates and echoes an Openbox pipe menu consisting of data which describes available GPU hardware, 
 # X screens, display connections, and xrandr options available for the manipulation of available screens and connections.
 buildDisplaysMenu() {
+
+  connectionNamesToPass="$1"
+  primaryConnectionNameToPass="$2"
+  dpiToPass=$3
+  reversePrimeProviderToPass=$4
+  reversePrimeSourceToPass=$5
+  primePanningBoolToPass=$6
+  callbackToPass="$7"
 
   xrandr --query | {
 
@@ -995,6 +1094,7 @@ buildDisplaysMenu() {
       connectionSupportedResolutions=''
       connectionDetailLabels=''
       connectionSupportedReolutionLabels=''
+      connectionBrightnessInterface=''
 
       while read -r line
       do
@@ -1061,23 +1161,49 @@ buildDisplaysMenu() {
 
           if [ ! -z "$connectionName" ]
           then
-            connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$primaryConnectionName"`"
+            connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$connectionBrightnessInterface" "$primaryConnectionName"`"
             connectionName=''
           fi
 
           inactiveConnectionName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
           inactiveConnectionsMenu="$inactiveConnectionsMenu`corgiObMenuItem "label:$inactiveConnectionName"`"
 
-        elif ! corgiHasSubstring "$line" 'disconnected' && corgiHasSubstring "$line" 'connected'
+        elif corgiHasSubstring "$line" ' connected'
         then
 
           if [ ! -z "$connectionName" ]
           then
-            connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$primaryConnectionName"`"
+            connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$connectionBrightnessInterface" "$primaryConnectionName"`"
             connectionName=''
           fi        
 
           connectionName="`corgiFetchSubstringBefore "$line" ' ' 'first'`"
+          
+          if corgiHasSubstring "$connectionNamesToPass" "$connectionName" && corgiHasSubstring "$connectionNamesToPass" "("
+          then
+          
+            ## CHECK the client-provided connection names for brightness interfaces.
+            ## IF a brightness interface for a connection name exists, collect it, to be used in the brightness submenu,
+            ## then remove it from the client-provided connection names, before passing them on as an arg for the detect method...
+          
+            connectionNamesToPassBeforeConnectionName="`corgiFetchSubstringBefore "$connectionNamesToPass" "$connectionName"`"
+            connectionNamesToPassAfterConnectionName="`corgiFetchSubstringAfter "$connectionNamesToPass" "$connectionName"`"
+            connectionNameCheckedForBrightnessInterface="$connectionNamesToPassAfterConnectionName"
+            
+            if corgiHasSubstring "$connectionNameCheckedForBrightnessInterface" "$connectionDataDelimiter"
+            then
+              connectionNameCheckedForBrightnessInterface="`corgiFetchSubstringBefore "$connectionNameCheckedForBrightnessInterface" "$connectionDataDelimiter"`"
+            fi
+            
+            if corgiHasSubstring "$connectionNameCheckedForBrightnessInterface" '(' && corgiHasSubstring "$connectionNameCheckedForBrightnessInterface" ')'
+            then
+              connectionBrightnessInterface="`corgiFetchSubstringBetween "$connectionNameCheckedForBrightnessInterface" '(' ')'`"
+              connectionNamesToPass="$connectionNamesToPassBeforeConnectionName$connectionName$connectionNamesToPassAfterConnectionName"
+            fi
+          
+          fi
+          
+          connectionSupportsPanning=`echoConnectionSupportsPanning "$connectionName"`
 
           line="`corgiFetchSubstringAfter "$line" 'connected'`"
           line="`corgiTrimWhiteSpace "$line"`"
@@ -1100,33 +1226,38 @@ buildDisplaysMenu() {
           line="`corgiTrimWhiteSpace "$line"`"
 
           panning=0
+          tracking=0
+          border=0
 
-          if corgiHasSubstring "$line" 'panning'
+          if [ "$connectionSupportsPanning" = 'yes' ]
           then
-            panning="`corgiFetchSubstringAfter "$line" 'panning '`"
-            panning="`corgiFetchSubstringBefore "$panning" ' ' 'first'`"
+
+            if corgiHasSubstring "$line" 'panning'
+            then
+              panning="`corgiFetchSubstringAfter "$line" 'panning '`"
+              panning="`corgiFetchSubstringBefore "$panning" ' ' 'first'`"
+            fi
+
+            if corgiHasSubstring "$line" 'tracking'
+            then
+              tracking="`corgiFetchSubstringAfter "$line" 'tracking '`"
+              tracking="`corgiFetchSubstringBefore "$tracking" ' ' 'first'`"
+            fi
+
+            if corgiHasSubstring "$line" 'border'
+            then
+              border="`corgiFetchSubstringAfter "$line" 'border '`"
+              border="`corgiFetchSubstringBefore "$border" ' ' 'first'`"
+            fi
+
+          else
+            panning='not supported'
+            tracking='not supported'
+            border='not supported'
           fi
 
           connectionDetailLabels="Panning: $panning$connectionDataDelimiter"
-
-          tracking=0
-
-          if corgiHasSubstring "$line" 'tracking'
-          then
-            tracking="`corgiFetchSubstringAfter "$line" 'tracking '`"
-            tracking="`corgiFetchSubstringBefore "$tracking" ' ' 'first'`"
-          fi
-
           connectionDetailLabels="$connectionDetailLabels"'Tracking: '"$tracking$connectionDataDelimiter"
-
-          border=0
-
-          if corgiHasSubstring "$line" 'border'
-          then
-            border="`corgiFetchSubstringAfter "$line" 'border '`"
-            border="`corgiFetchSubstringBefore "$border" ' ' 'first'`"
-          fi
-
           connectionDetailLabels="$connectionDetailLabels"'Border: '"$border$connectionDataDelimiter"
           connectionDetailLabels="$connectionDetailLabels"'Offset X: '"`corgiFetchSubstringBefore "$connectionPosition" '+'`$connectionDataDelimiter"
           connectionDetailLabels="$connectionDetailLabels"'Offset Y: '"`corgiFetchSubstringAfter "$connectionPosition" '+'`$connectionDataDelimiter"
@@ -1170,7 +1301,7 @@ buildDisplaysMenu() {
 
       if [ ! -z "$connectionName" ]
       then
-        connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$primaryConnectionName"`"
+        connectionMenus="`appendConnectionMenus "$connectionMenus" "$connectionName" "$connectionNames" "$connectionSupportedResolutions" "$connectionDetailLabels" "$connectionSupportedResolutionLabels" "$connectionBrightnessInterface" "$primaryConnectionName"`"
       fi  
 
       menuId="`corgiMakeIdString "corgi-menus-displays-screens-"`"
@@ -1189,7 +1320,8 @@ buildDisplaysMenu() {
       menuId="`corgiMakeIdString "corgi-menus-displays-connections-"`"
       connectionMenus="`corgiObMenu "id:$menuId" "label:Connections" "content:$connectionMenus$inactiveConnectionsMenu"`"
 
-      detectConnectionsItem="`corgiObMenuItem "label:Detect Connections" "action:Execute" "command:xrandr --auto"`"
+      detectConnectionsCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/corgi-displays-management.shlib\" ; setDisplays \"$connectionNamesToPass\" \"$primaryConnectionNameToPass\" $dpiToPass $reversePrimeProviderToPass $reversePrimeSourceToPass $primePanningBoolToPass \"$callbackToPass\"'"
+      detectConnectionsItem="`corgiObMenuItem "label:Detect Connections" "action:Execute" "command:$detectConnectionsCommand"`"
 
       echo "$screenMenus$devicesMenu$connectionMenus$detectConnectionsItem"
       exit 0  

@@ -1,14 +1,18 @@
 #!/bin/sh
 
-# Copyright 2015 Antonio Malcolm
+# Copyright 2015 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
 #
-# This file is part of Corgi Scripts.
-#   
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
 # Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
 # If a copy of the MPL was not distributed with this file, 
 # you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-scripts-core.shlib - The core library of variables and functions for, and shared by, the corgi family of shell-based utilities.
+# corgi-posix-core.shlib - The core library of variables and functions for, and shared by, the corgi family of shell-based utilities.
 # These functions can also be used by any script which sources this file.
 #
 # v2015.06.17
@@ -90,7 +94,7 @@ corgiFetchNthArg() {
 
 
 # Echoes a result string, from the provided string, which consists of all characters which occur 
-# before the first or last occurence of the specified appending substring.
+# before the first or last occurrence of the specified appending substring.
 # (Defaults to last occurrence of the appending substring.)
 #
 # $1 - string, required, the full string, from which the result string is produced
@@ -607,13 +611,13 @@ corgiMountPointHasMount() {
 }
 
 
-# This is a convenience function, useful for wrapping standard calls to shell functions and command line utilities.
-# When used in place of a direct call to another funtion or utility, arguments can be supplied as strings, representing pairs, as "name:value" or "name=value"
-# This function removes the need to provide arguments in any expected/specified order (and, therefore, the need to supply empty arguments, 
-# in order to maintain that order, where we can now simply omit them).
+# This is a convenience/wrapper function, useful for wrapping standard calls to shell functions and command line utilities.
+# When used in place of a direct call to a function or utility, arguments can be supplied as string name:value pairs, in format "name:value" or "name=value"
+# This function removes the need to provide arguments in an expected/specified order. 
+# (And, therefore, the need to supply empty arguments, in order to maintain that order- we can now simply omit empty args).
 #
-# NOTE: If desired, args can also be passed as they would normally, in their expected order, so this function provides both its own
-# implemenation for passing args, as well what's traditional.
+# NOTE: If desired, args for wrapped calls can still be passed traditionally- use of this wrapper does NOT preempt or replace traditional arg passing, 
+# it merely interprets.
 #
 # EXAMPLE:
 # A function, vocalizeAtTheMoonImpl(), requires 4 arguments. 
@@ -709,7 +713,7 @@ corgiParseShellRequestImpl() {
 
     done
 
-    if ! $hasNamed
+    if [ $hasNamed = false ]
     then
 
       if [ -z "$callbackArgs" ]
@@ -730,7 +734,7 @@ corgiParseShellRequestImpl() {
 
   done
 
-  if $hasAtLeastOneNamed && [ ! -z "$callbackArgs" ]
+  if [ $hasAtLeastOneNamed = true ] && [ ! -z "$callbackArgs" ]
   then
 
     systemIFS=$IFS
@@ -750,8 +754,8 @@ corgiParseShellRequestImpl() {
 
 
 # This is a convenience function, useful for wrapping standard calls to shell functions and command line utilities.
-# Refer to the documentation for #corgiParseShellRequest(), above, for a complete description.
-# This function wraps #corgiParseShellRequest() in a subshell, for isolation.
+# Refer to the documentation for #corgiParseShellRequestImpl(), above, for a complete description.
+# This function wraps #corgiParseShellRequestImpl() in a subshell, for isolation.
 corgiParseShellRequest() {
   (corgiParseShellRequestImpl "$@")
 }

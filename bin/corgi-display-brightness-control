@@ -1,0 +1,14 @@
+#!/bin/sh
+
+corgiDisplaysManagementLib="/usr/local/lib/corgi/corgi-displays-management.shlib"
+
+if [ ! -e "$corgiDisplaysManagementLib" ]
+then
+  logger "ERROR (displays-setup-default): The Corgi Displays Management library is not present. Exiting..."
+  echo "ERROR (displays-setup-default): The Corgi Displays Management library is not present. Exiting..."
+  exit 1
+fi
+
+. "$corgiDisplaysManagementLib"
+
+setDisplayBrightness "$@"

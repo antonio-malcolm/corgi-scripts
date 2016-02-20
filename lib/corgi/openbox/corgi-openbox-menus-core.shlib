@@ -1,12 +1,16 @@
 #!/bin/sh
 
-# Copyright 2015 Antonio Malcolm
+# Copyright 2015 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
 #
-# This file is part of Corgi Scripts.
-#   
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
 # Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
 # If a copy of the MPL was not distributed with this file, 
 # you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
 # corgi-openbox-menus-core.shlib - The core library of functions for, and shared by, Corgi shell-based utilites used to generate Openbox pipemenus.
 # These functions can also be used by any script which sources this file.
@@ -15,12 +19,12 @@
 #
 # Authored by Antonio Malcolm
 #
-# Requires: corgi-scripts-core.shlib
+# Requires: corgi-posix-core.shlib
 
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
-corgiCoreLib="$parentDirectory/lib/corgi/corgi-scripts-core.shlib"
+corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
 
 if [ ! -e "$corgiCoreLib" ]
 then
@@ -191,7 +195,7 @@ corgiObMenuSeparatorImpl() {
 # Args (optional, and in any order):
 # "content:<VALUE>" - the immediate child of the pipemenu (normally, the XML string for an Openbox menu or item)
 corgiObPipeMenu() {
-  corgiParseShellRequest corgiObPipeMenuImpl "content" "$@"
+  corgiParseShellRequest corgiObPipeMenuImpl 'content' "$@"
   exit $?
 }
 
@@ -213,7 +217,7 @@ corgiObPipeMenu() {
 # "execute:<VALUE>" - a shell command to be executed on selection of the menu
 # "content:<VALUE>" - the immediate child of the generated menu (normally, the XML string for an Openbox pipemenu, menu or item)
 corgiObMenu() {
-  corgiParseShellRequest corgiObMenuImpl "id,label,icon,execute,content" "$@"
+  corgiParseShellRequest corgiObMenuImpl 'id,label,icon,execute,content' "$@"
   exit $?
 }
 
@@ -235,7 +239,7 @@ corgiObMenu() {
 # "command:<VALUE>" - a shell command to be executed on selection of the menu (provided only if "Execute" was provided for $3)
 # "prompt:<VALUE>" - a prompt to be displayed to the user, before executing a shell command
 corgiObMenuItem() {
-  corgiParseShellRequest corgiObMenuItemImpl "label,icon,action,command,prompt" "$@"
+  corgiParseShellRequest corgiObMenuItemImpl 'label,icon,action,command,prompt' "$@"
   exit $?
 }
 
@@ -253,7 +257,7 @@ corgiObMenuItem() {
 # Args (optional, and in any order):
 # "label:<VALUE>" - the separator display text
 corgiObMenuSeparator() {
-  corgiParseShellRequest corgiObMenuSeparatorImpl "label" "$@"
+  corgiParseShellRequest corgiObMenuSeparatorImpl 'label' "$@"
   exit $?
 }
 

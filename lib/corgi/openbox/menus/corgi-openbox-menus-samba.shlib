@@ -1,12 +1,16 @@
 #!/bin/sh
 
-# Copyright 2015 Antonio Malcolm
+# Copyright 2015 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
 #
-# This file is part of Corgi Scripts.
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
 #
 # Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
 # If a copy of the MPL was not distributed with this file, 
 # you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
 # corgi-openbox-menus-samba.shlib - Functions used to generate Openbox menus and items for describing and managing a samba server, as well as connections, as a client, 
 # to other samba shares, using samba, smbclient, and udevil as backends. In the absence of udevil, this library will attempt to use mount and umount- both with and without passwordless sudo.
@@ -16,7 +20,7 @@
 # Authored by Antonio Malcolm
 #
 # Requires: corgi-openbox-menus-core.shlib
-# Requires: corgi-scripts-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
 # Requires: smbclient - if we want to find and connect to samba shares
 # Requires: cifs-utils - if we want to mount samba shares
 # Requires: udevil - if we want to mount samba shares (allows us to mount without sudo)
@@ -293,7 +297,7 @@ buildSambaMountPointPath() {
 
   # If udevil is not available, force mounting on the user's directory, 
   # to ensure limited and safe permissions- we are NOT employing passwordless sudo on mkdir!
-  if ! $hasUdevil && [ "$userName" != 'root' ]
+  if [ $hasUdevil = false ] && [ "$userName" != 'root' ]
   then
 
     mountPoint="/home/$userName$mountPoint"
@@ -437,10 +441,10 @@ parseSambaShareMountResponse() {
     # Shorten the mount point path for display purposes...
     mountPointDisplay="`buildMountPointDisplayString "$mountPoint"`"
  
-    if $hasNotify
+    if [ $hasNotify = true ]
     then
       notify-send "\"$shareName\" was mounted at: $mountPointDisplay"
-    elif $hasZenity
+    elif [ $hasZenity = true ]
     then
       zenity --info --title="Success" --text="\"$shareName\" was mounted at: $mountPointDisplay"
     fi
@@ -457,7 +461,7 @@ parseSambaShareMountResponse() {
       elif corgiHasSubstring "$response" 'Permission denied'
       then 
        
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           promptUserForSambaClientCredentials "$ipAddress" "$shareName" mountSambaShare "$ipAddress" "$shareName" $mountAsReadOnly $useSudo
         fi
@@ -466,7 +470,7 @@ parseSambaShareMountResponse() {
       || corgiHasSubstring "$response" 'Unable to find suitable address' || corgiHasSubstring "$response" 'bad UNC'
       then
 
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           promptUserForSambaShareAddress mountSambaShare $mountAsReadOnly 2 "$ipAddress" "$shareName"
         fi
@@ -474,7 +478,7 @@ parseSambaShareMountResponse() {
       elif corgiHasSubstring "$response" 'Unable to find suitable address' || corgiHasSubstring "$response" 'bad UNC'
       then
 
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           promptUserForSambaShareAddress mountSambaShare $mountAsReadOnly 2 "$ipAddress" "$shareName"
         fi
@@ -482,7 +486,7 @@ parseSambaShareMountResponse() {
       elif corgiHasSubstring "$response" 'No such device'
       then
 
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           promptUserForSambaShareAddress mountSambaShare $mountAsReadOnly 4 "$ipAddress" "$shareName"
         fi
@@ -496,7 +500,7 @@ parseSambaShareMountResponse() {
           response="`echo "Couldn't mount \"$shareName\".\n$response"`"
         fi
 
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           zenity --error --title="Error" --text="$response"
         fi
@@ -540,7 +544,7 @@ mountSambaShareAt() {
 
   mountCommand="mount -t cifs //$ipAddress/$shareName $mountPoint -o"
 
-  if $hasUdevil
+  if [ $hasUdevil = true ]
   then
     useSudo=false
     mountCommand="udevil $mountCommand"  
@@ -569,7 +573,7 @@ mountSambaShareAt() {
     mountCommand="$mountCommand,rw"
   fi
 
-  if ! $hasUdevil
+  if [ $hasUdevil = false ]
   then
     mountCommand="$mountCommand,noperm"
   fi
@@ -635,7 +639,7 @@ mountSambaShare() {
     mountAsReadOnly=false
   fi
 
-  if $hasUdevil || [ -z "$useSudo" ]
+  if [ $hasUdevil = true ] || [ -z "$useSudo" ]
   then
     useSudo=false
   fi
@@ -646,7 +650,7 @@ mountSambaShare() {
   
   mountPoint="`buildSambaMountPointPath "$ipAddress" "$shareName" "$userName"`"
 
-  if ! $hasUdevil && [ ! -d  "$mountPoint" ]
+  if [ $hasUdevil = false ] && [ ! -d  "$mountPoint" ]
   then
     mountResponse="`mkdir -p "$mountPoint" && mountSambaShareAt "$mountPoint" "$ipAddress" "$shareName" "$userId" "$groupId" $mountAsReadOnly $useSudo "$sambaUser" "$sambaKey"`"
     parseSambaShareMountResponse "$mountResponse" "$mountPoint" "$ipAddress" "$shareName" $mountAsReadOnly $useSudo
@@ -685,7 +689,7 @@ unmountSambaShare() {
 
   unmountCommand="umount $mountPoint"
 
-  if $hasUdevil
+  if [ $hasUdevil = true ]
   then
     useSudo=false
     unmountCommand="udevil $unmountCommand"  
@@ -712,16 +716,16 @@ unmountSambaShare() {
     if [ -z "$response" ]
     then
 
-      if $hasUdevil
+      if [ $hasUdevil = true ]
       then
 
-        if $hasNotify
+        if [ $hasNotify = true ]
         then
 
           # Notification may run before cleanup is done, but that is OK...
           notify-send "\"$shareName\" was unmounted from: $mountPointDisplay"
 
-        elif $hasZenity
+        elif [ $hasZenity = true ]
         then
           zenity --info --title="Success" --text="\"$shareName\" unmounted from: $mountPointDisplay"
         fi
@@ -737,13 +741,13 @@ unmountSambaShare() {
         || corgiEndsWithSubstring "$cleanMountPathReponse" 'path is not directory.' || corgiEndsWithSubstring "$cleanMountPathReponse" 'path is not empty.'
         then
 
-          if $hasNotify
+          if [ $hasNotify = true ]
           then
 
             # Notification may run before cleanup is done, but that is OK...
             notify-send "\"$shareName\" was unmounted from: $mountPointDisplay"
 
-          elif $hasZenity
+          elif [ $hasZenity = true ]
           then
             zenity --info --title="Success" --text="\"$shareName\" unmounted from: $mountPointDisplay"
           fi
@@ -754,7 +758,7 @@ unmountSambaShare() {
           # after unmount, will likely never be encountered, 
           # but in case it is...
 
-          if $hasZenity
+          if [ $hasZenity = true ]
           then
             zenity --info --title="Error" --text="`echo "\"$shareName\" was unmounted.\nHowever, we couldn't remove the mount directory: $mountPointDisplay\n$response"`"
           fi
@@ -763,7 +767,7 @@ unmountSambaShare() {
 
       else
 
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           zenity --info --title="Error" --text="Unable to unmount \"$shareName\" from: $mountPointDisplay"
         fi
@@ -772,12 +776,12 @@ unmountSambaShare() {
 
     else
 
-      if ! $hasUdevil && corgiHasSubstring "$response" 'not permitted'
+      if [ $hasUdevil = false ] && corgiHasSubstring "$response" 'not permitted'
       then
         unmountSambaShare "$mountPoint" "$ipAddress" "$shareName" true
       else
 
-        if $hasZenity
+        if [ $hasZenity = true ]
         then
           zenity --info --title="Error" --text="`echo "Unable to unmount \"$shareName\".\n$response"`"
         fi
