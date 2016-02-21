@@ -1367,7 +1367,12 @@ buildSambaHostMenus() {
 
     done
 
-    hostPipeMenus="`corgiObPipeMenu "content:$hostMenus"`"
+		if [ -z "$hostMenus" ]
+		then
+			hostMenus="`corgiObMenuItem "label:No hosts responding.."`"
+		fi
+		
+		hostPipeMenus="`corgiObPipeMenu "content:$hostMenus"`"
 
     echo "$hostPipeMenus"
     exit 0
