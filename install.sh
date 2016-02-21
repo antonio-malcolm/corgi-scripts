@@ -32,7 +32,7 @@ then
   esac
 
   case "$prefix" in
-    '"'*) prefix="${prefix#*"}" ;;
+    '"'*) prefix="${prefix#*}" ;;
   esac
 
   case "$prefix" in
