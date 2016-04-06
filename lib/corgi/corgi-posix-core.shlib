@@ -101,7 +101,7 @@ corgiFetchNthArg() {
 # $2 - string, required, the appending substring, from before which we produce the result string
 # $3 - string, optional, determines from where the result string is produced -
 #      options are "first" (from before the occurrence of the appending substring closest to the head of the string) 
-#      and "last" (from before the occurrence of the appending substring closest to the tail of the string
+#      and "last" (from before the occurrence of the appending substring closest to the tail of the string)
 #      (an incorrect option, or the absence of an option, will result in "last" being assumed)
 corgiFetchSubstringBefore() {
 
@@ -377,39 +377,68 @@ corgiPadString() {
 }
 
 
+# Removes a specified number characters from the head or tail of a string, 
+# and echos the result.
+#
+#
+# $1 - string, required, to be trimmed
+# $3 - number, required, the desired number of characters to be trimmed from the string
+# $4 - string, optional, determines from where the string will be trimmed - 
+#      options are "front" (remove from head), or "back" (remove from tail) - defaults to "back"
+corgiTrimStringByLength() {
+
+  string="$1"
+  numCharsToRemove=$2
+  placement="$3"  
+
+	removedCount=0
+
+  while [ $removedCount -lt $numCharsToRemove ]
+  do
+
+    if [ "$placement" = 'front' ]
+    then
+      string="${string#?}"
+    else
+      string="${string%?}"
+    fi
+    
+    removedCount=$(($removedCount + 1))
+  
+  done
+
+  echo "$string"
+  exit 0
+
+}
+
+
 # Removes characters from the head or tail of a string, 
 # until it reaches the desired length, 
 # and echos the result.
 #
 #
 # $1 - string, required, to be trimmed
-# $3 - number, optional, the desired length of the resulting, trimmed, string
+# $3 - number, required, the desired length of the resulting, trimmed, string
 # $4 - string, optional, determines from where the string will be trimmed - 
-#      options are "after" (remove from tail), or "before" (remove from head) - defaults to "after"
-corgiTrimString() {
+#      options are "front" (remove from head), or "back" (remove from tail) - defaults to "back"
+corgiTrimStringToLength() {
 
   string="$1"
   length=$2
   placement="$3"  
 
-  if [ ${#string} -gt $length ]
-  then
+  while [ ${#string} -gt $length ]
+  do
 
-    numberOfCharacters=$((${#string - $length}))
-
-    for idx in `seq 1 $numberOfCharacters`
-    do
-   
-      if [ "$placement" = 'before' ]
-      then
-        string="${string#?}"
-      else
-        string="${string%?}"
-      fi
+    if [ "$placement" = 'front' ]
+    then
+      string="${string#?}"
+    else
+      string="${string%?}"
+    fi
   
-    done
-
-  fi
+  done
 
   echo "$string"
   exit 0
@@ -423,12 +452,24 @@ corgiTrimString() {
 #
 # $1 - string, required, to be trimmed
 corgiTrimWhiteSpaceBefore() {
+	
+	spaceChar=' '
+	tabChar="`printf '\t'`"
 
   resultString="$1"
 
-  while corgiEndsWithSubstring "$resultString" ' '
+  while corgiStartsWithSubstring "$resultString" "$spaceChar" || corgiStartsWithSubstring "$resultString" "$tabChar"
   do
-    resultString="`corgiFetchSubstringBefore "$resultString" ' '`"
+  	
+  	removedChar="$spaceChar"
+		
+		if corgiStartsWithSubstring "$resultString" "$tabChar"
+		then
+			removedChar="$tabChar"	
+		fi
+  	
+    resultString="`corgiFetchSubstringAfter "$resultString" "$removedChar" 'first'`"
+  
   done
 
   echo "$resultString"
@@ -444,11 +485,23 @@ corgiTrimWhiteSpaceBefore() {
 # $1 - string, required, to be trimmed
 corgiTrimWhiteSpaceAfter() {
 
+	spaceChar=' '
+	tabChar="`printf '\t'`"
+
   resultString="$1"
 
-  while corgiStartsWithSubstring "$resultString" ' '
+  while corgiEndsWithSubstring "$resultString" "$spaceChar" || corgiEndsWithSubstring "$resultString" "$tabChar"
   do
-    resultString="`corgiFetchSubstringAfter "$resultString" ' ' 'first'`"
+  
+		removedChar="$spaceChar"
+		
+		if corgiEndsWithSubstring "$resultString" "$tabChar"
+		then
+			removedChar="$tabChar"	
+		fi
+		
+    resultString="`corgiFetchSubstringBefore "$resultString" "$removedChar"`"
+
   done
 
   echo "$resultString"
@@ -486,6 +539,19 @@ corgiTrimWhiteSpace() {
 
   echo "$resultString"
   exit 0
+
+}
+
+
+corgiDeriveNumberFromPercentage() {
+		
+	percentage=$1
+	fromNumber=$2
+	
+	result="`echo $percentage 100 $fromNumber | awk '{printf "%.0f", (($1/$2)*$3)}'`"
+
+	echo "$result"
+	exit 0
 
 }
 

@@ -32,6 +32,7 @@
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
+
 corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
 
 if [ ! -e "$corgiObMenuLib" ]

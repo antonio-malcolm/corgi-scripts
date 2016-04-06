@@ -1,0 +1,1282 @@
+#!/bin/sh
+
+# Copyright 2016 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
+#
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-power-management-cpu.shlib - Functions used to generate Openbox menus and items for describing and managing power management and
+#                                                  throttling options for CPUs, using /proc/cpuinfo and cpupower as backends.
+#
+# v2015.07.17
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-openbox-menus-core.shlib
+# Requires: corgi-power-management-cpu.shlib
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib or corgi-power-management-cpu.shlib)
+# Requires: cpupower - for obtaining information describing CPU performance and power saving characteristics,
+#                      as well as setting performance and power saving options
+# Optional: libnotify - used for informational and success notifications
+
+
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+
+corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
+corgiPowerManagementCpuLib="$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib"
+
+if [ ! -e "$corgiObMenuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  exit 1
+fi
+
+if [ ! -e "$corgiPowerManagementCpuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Power Management CPU library is not present. Exiting..."
+  echo "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Power Management CPU library is not present. Exiting..."
+  exit 1
+fi
+
+. "$corgiObMenuLib"
+. "$corgiPowerManagementCpuLib"
+
+hasCpuPower=false
+hasNotify=false
+
+if ! command -v cpupower > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-power-management.shlib): cpupower not found. Please install cpupower"
+else 
+  hasCpuPower=true
+fi
+
+if ! command -v notify-send > /dev/null
+then
+  logger "INFO (corgi-openbox-menus-power-management.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
+else
+  hasNotify=true  
+fi
+
+
+dataDelimiter=','
+
+
+buildCpuDetailMenuItem() {
+  
+  cpuDetailMenuItem=''
+  
+  field="$1"
+
+  fieldId="`corgiFetchSubstringBefore "$field" ':' 'first'`"
+  fieldId="`corgiTrimWhiteSpace "$fieldId"`"
+ 
+  shift
+
+  label=''
+  
+  case "$fieldId" in
+    'driver') label='Driver' ;;
+    'available cpufreq governors') label='Governors' ;;
+  esac
+  
+   # We want to produce items only for those fields listed in the above case...
+  if [ ! -z "$label" ]
+  then
+   
+    value="`corgiFetchSubstringAfter "$field" ':' 'first'`"
+    value="`corgiTrimWhiteSpace "$value"`"
+    
+    if [ -z "$value" ]
+    then
+      value='--'
+    else
+    
+      if [ "$label" = 'Driver' ]
+      then
+        value="`corgiObEscapeUnderscores "$value"`"
+      fi
+    
+    fi
+
+    cpuDetailMenuItem="`corgiObMenuItem "label:$label: $value"`"
+
+  fi
+
+  echo "$cpuDetailMenuItem"
+  exit 0
+  
+}
+
+
+buildCpuDetailMenuItems() {
+  
+  cpuDetailMenuItems=''
+  
+  processorId="$1"
+  option=$2
+  additionalDetailPairs="$3"
+  
+  if [ -z "$option" ]
+  then
+    option='all'
+  fi
+  
+  if [ ! -z "$additionalDetailPairs" ]
+  then
+    
+    if ! corgiEndsWithSubstring "$additionalDetailPairs" $dataDelimiter
+    then
+      additionalDetailPairs="$additionalDetailPairs$dataDelimiter"  
+    fi
+  
+  fi
+  
+  if [ "$option" = 'user' ] || [ "$option" = 'all' ]
+  then
+    
+    cpuFrequencyInfo="`getCpuFrequencyInfo "$processorId" 'user'`"
+    activeGovernor="`corgiFetchSubstringAfter "$cpuFrequencyInfo" "$dataDelimiter"`"
+    cpuFrequencyInfo="`corgiFetchSubstringBefore "$cpuFrequencyInfo" "$dataDelimiter"`"
+    activeMinSpeed="`corgiFetchSubstringBefore "$cpuFrequencyInfo" "$dataDelimiter"`"
+    activeMaxSpeed="`corgiFetchSubstringAfter "$cpuFrequencyInfo" "$dataDelimiter"`"
+    
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Active Base: $activeMinSpeed MHz"`"
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Active Ceiling: $activeMaxSpeed MHz"`"
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Active Governor: $activeGovernor"`"
+    
+    boostState="`getCpuBoostState "$processorId"`"
+    
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Active Boost State: $boostState"`"
+    
+    additionalActivePairs="$additionalDetailPairs"
+    
+    while corgiHasSubstring "$additionalActivePairs" $dataDelimiter
+    do
+      
+      additionalDetailPair="`corgiFetchSubstringBefore "$additionalActivePairs" $dataDelimiter 'first'`"
+      
+      label="`corgiFetchSubstringBefore "$additionalDetailPair" ':'`"
+      label="`corgiTrimWhiteSpace "$label"`"
+      
+      if corgiStartsWithSubstring "$label" 'Active'
+      then
+        
+        value="`corgiFetchSubstringAfter "$additionalDetailPair" ':'`"
+        value="`corgiTrimWhiteSpace "$value"`"
+      
+        cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
+      
+      fi
+      
+      additionalActivePairs="`corgiFetchSubstringAfter "$additionalActivePairs" $dataDelimiter 'first'`"
+          
+    done
+  
+  fi
+  
+  if [ "$option" = 'primary' ] || [ "$option" = 'all' ]
+  then
+  
+    cpuFrequencyInfo="`getCpuFrequencyInfo "$processorId"`"
+    minSpeed="`corgiFetchSubstringBefore "$cpuFrequencyInfo" "$dataDelimiter"`"
+    maxSpeed="`corgiFetchSubstringAfter "$cpuFrequencyInfo" "$dataDelimiter"`"
+    
+    boostState="`getCpuBoostState "$processorId" false`"
+    
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Hard Base: $minSpeed MHz"`"
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Hard Ceiling: $maxSpeed MHz"`"
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Boost State: $boostState"`"
+    
+    while corgiHasSubstring "$additionalDetailPairs" $dataDelimiter
+    do
+      
+      additionalDetailPair="`corgiFetchSubstringBefore "$additionalDetailPairs" $dataDelimiter 'first'`"
+      
+      label="`corgiFetchSubstringBefore "$additionalDetailPair" ':'`"
+      label="`corgiTrimWhiteSpace "$label"`"
+      
+      if ! corgiStartsWithSubstring "$label" 'Active'
+      then
+        
+        value="`corgiFetchSubstringAfter "$additionalDetailPair" ':'`"
+        value="`corgiTrimWhiteSpace "$value"`"
+      
+        cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
+      
+      fi
+      
+      additionalDetailPairs="`corgiFetchSubstringAfter "$additionalDetailPairs" $dataDelimiter 'first'`"
+          
+    done
+    
+  fi  
+      
+  if [ "$option" != 'user' ]
+  then
+    
+    cacheSize="`getCpuInfo "$processorId" false 'cache size' true`"
+    cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:Cache Size: $cacheSize"`"
+    
+    cpupower --cpu "$processorId" frequency-info | {
+        
+      while read -r line
+      do
+        cpuDetailMenuItems="$cpuDetailMenuItems`buildCpuDetailMenuItem "$line"`"
+      done        
+        
+      echo "$cpuDetailMenuItems"
+      exit 0  
+                
+    }
+    
+  else
+    echo "$cpuDetailMenuItems"
+    exit 0  
+  fi
+  
+  exit $?
+  
+}
+
+
+buildCpuDetailsMenu() {
+  
+  supportsPerfBias=false
+  
+  processorId="$1"
+  additionalDetailPairs="$2"
+  cpuSettingsMenuIdSubId="$3"
+  messagePrefix="$4"
+  
+  if ! corgiHasSubstring "$additionalDetailPairs" ':'
+  then
+    cpuSettingsMenuIdSubId="$2"
+    messagePrefix="$3"
+  else
+  
+    perfBiasSupport="`corgiFetchSubstringBetween "$additionalDetailPairs$dataDelimiter" 'Performance Bias' "$dataDelimiter" 'first'`"
+    
+    if [ ! -z "$perfBiasSupport" ] \
+    && ! corgiHasSubstring "$perfBiasSupport" 'unsupported'
+    then
+      supportsPerfBias=true  
+    fi 
+  
+  fi
+  
+  detailMenuItems="`buildCpuDetailMenuItems "$processorId" 'user' "$additionalDetailPairs"`"
+  cpuSettingsMenu=''
+  
+  if [ ! -z "$cpuSettingsMenuIdSubId" ]
+  then
+    
+    cpuSettingsMenus="`buildCpuSettingsMenus "$processorId" $supportsPerfBias "$setMenuIdSubId" "$messagePrefix"`"
+    
+    menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$cpuSettingsMenuIdSubId-set-"`"
+    cpuSettingsMenu="`corgiObMenu "id:$menuId" "label:Set" "content:$cpuSettingsMenus"`"
+  
+  fi
+  
+  echo "`corgiObPipeMenu "content:$detailMenuItems$cpuSettingsMenu"`"
+  exit $?
+  
+}
+
+
+buildCpuActiveDetailMenuItems() {
+  
+  notationSuffix="$1"
+  
+  baseSpeedsPassAudit=$2
+  baseSpeed="$3"
+  
+  ceilingSpeedsPassAudit=$4
+  ceilingSpeed="$5"
+  
+  governorsPassAudit=$6
+  governor="$7"
+  
+  perfBiasesPassAudit=$8
+  perfBias="$9"
+  
+  boostStatesPassAudit=$10
+  boostState="$11"
+          
+  activeDetailMenuItems=''
+          
+  if [ $baseSpeedsPassAudit = true ]
+  then
+    notation='all '"$notationSuffix"'s'
+    activeDetailMenuItems="`corgiObMenuItem "label:Active Base: $notation $baseSpeed MHz"`"
+  else
+    notation='set per '"$notationSuffix"
+    activeDetailMenuItems="`corgiObMenuItem "label:Active Base: $notation"`"
+  fi
+        
+  if [ $ceilingSpeedsPassAudit = true ]
+  then
+    notation='all '"$notationSuffix"'s'
+    activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Ceiling: $notation $ceilingSpeed MHz"`"
+  else
+    notation='set per '"$notationSuffix"
+    activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Ceiling: $notation"`"
+  fi
+        
+  if [ $governorsPassAudit = true ]
+  then
+    notation='all '"$notationSuffix"'s'
+    activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Governor: $notation $governor"`"
+  else
+    notation='set per '"$notationSuffix"
+    activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Governor: $notation"`"
+  fi
+  
+  if [ "$boostState" != 'unsupported' ]
+  then
+          
+    if [ $boostStatesPassAudit = true ]
+    then
+      notation='all '"$notationSuffix"'s'
+      activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Boost State: $notation $boostState"`"
+    else
+      notation='set per '"$notationSuffix"
+      activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Boost State: $notation"`"
+    fi
+          
+  fi  
+  
+  if [ "$perfBias" != 'unsupported' ]
+  then
+          
+    if [ $perfBiasesPassAudit = true ]
+    then
+      notation='all '"$notationSuffix"'s'
+      activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Performance Bias: $notation $perfBias"`"
+    else
+      notation='set per '"$notationSuffix"
+      activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Performance Bias: $notation"`"
+    fi
+  
+  fi
+
+  echo "$activeDetailMenuItems"
+  exit 0
+
+}
+
+
+buildCpuSpeedOptionsMenuItemsBody() {
+  
+  cpuOptionMenuItems=''
+  
+  processorIds="$1"
+  minSpeed="$2"
+  maxSpeed="$3"
+  activeMinSpeed="$4"
+  activeMaxSpeed="$5"
+  option="$6"
+  messagePrefix="$7"
+  
+  if [ -z "$option" ]
+  then
+    option='abs'
+  elif [ "$option" != 'min' ] && [ "$option" != 'max' ] && [ "$option" != 'abs' ]
+  then
+    option='abs'
+  fi
+  
+  if corgiHasSubstring "$minSpeed" '.'
+  then
+    minSpeed="`corgiFetchSubstringBefore "$minSpeed" '.'`"  
+  fi
+  
+  if corgiHasSubstring "$maxSpeed" '.'
+  then
+    maxSpeed="`corgiFetchSubstringBefore "$maxSpeed" '.'`"  
+  fi
+  
+  if corgiHasSubstring "$activeMinSpeed" '.'
+  then
+    activeMinSpeed="`corgiFetchSubstringBefore "$activeMinSpeed" '.'`"  
+  fi
+  
+  if corgiHasSubstring "$activeMaxSpeed" '.'
+  then
+    activeMaxSpeed="`corgiFetchSubstringBefore "$activeMaxSpeed" '.'`"  
+  fi
+  
+  speeds="$minSpeed,10,20,30,40,50,60,70,80,90,$maxSpeed,"
+  
+  while corgiHasSubstring "$speeds" $dataDelimiter
+  do
+    
+    desiredSpeed=''
+    speed="`corgiFetchSubstringBefore "$speeds" $dataDelimiter 'first'`"
+    
+    if [ $speed -eq $minSpeed ]
+    then
+      desiredSpeed=$minSpeed
+      speed='Base'
+    elif [ $speed -eq $maxSpeed ]
+    then
+      desiredSpeed=$maxSpeed
+      speed='Ceiling'
+    else
+      desiredSpeed="`corgiDeriveNumberFromPercentage $speed $maxSpeed`"
+      speed="$speed%"
+    fi
+    
+    if [ $desiredSpeed -ge $minSpeed ] && [ $desiredSpeed -le $maxSpeed ]
+    then
+
+      setSpeedCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setSpeedOnCpus \"$processorIds\" \"$option\" \"$desiredSpeed\" false \"$messagePrefix\"'"
+    
+      case "$option" in
+        
+        'min')  
+        
+          if [ $desiredSpeed -le $activeMaxSpeed ]
+          then
+            cpuOptionMenuItems="$cpuOptionMenuItems`corgiObMenuItem "label:$speed ($desiredSpeed MHz)" "action:Execute" "command:$setSpeedCommand"`"  
+          fi
+        
+        ;;
+        
+        'max')  
+        
+          if [ $desiredSpeed -ge $activeMinSpeed ]
+          then
+            cpuOptionMenuItems="$cpuOptionMenuItems`corgiObMenuItem "label:$speed ($desiredSpeed MHz)" "action:Execute" "command:$setSpeedCommand"`"  
+          fi
+        
+        ;;
+        
+        'abs') cpuOptionMenuItems="$cpuOptionMenuItems`corgiObMenuItem "label:$speed ($desiredSpeed MHz)" "action:Execute" "command:$setSpeedCommand"`" ;;
+            
+      esac  
+    
+    fi
+    
+    speeds="`corgiFetchSubstringAfter "$speeds" $dataDelimiter 'first'`"
+    
+  done
+  
+  echo "$cpuOptionMenuItems"
+  exit $?
+  
+}
+
+
+buildCpuSpeedOptionsMenuItems() {
+  
+  processorIds="$1"
+  option="$2"
+  messagePrefix="$3"
+  
+  minAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds"`"
+  minSpeed="`corgiFetchSubstringBefore "$minAndMaxSpeeds" "$dataDelimiter"`"
+  maxSpeed="`corgiFetchSubstringAfter "$minAndMaxSpeeds" "$dataDelimiter"`"
+    
+  activeMinAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds" true`"
+  activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+  activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"  
+  
+  cpuOptionsMenuItems="`buildCpuSpeedOptionsMenuItemsBody "$processorIds" "$minSpeed" "$maxSpeed" "$activeMinSpeed" "$activeMaxSpeed" "$option" "$messagePrefix"`"
+  
+  echo "`corgiObPipeMenu "content:$cpuOptionsMenuItems"`"
+  exit $?
+  
+}
+
+
+buildCpuGovernorOptionsMenuItems() {
+  
+  cpuOptionsMenuItems=''
+  
+  processorIds="$1"
+  messagePrefix="$2"
+  
+  if corgiEndsWithSubstring "$processorIds" $dataDelimiter
+  then
+    processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+  fi  
+  
+  cpupower --cpu "$processorIds" frequency-info | grep 'governors:' | {
+    
+    governorsSharedByAllProcessorIds=''
+    governorsCheckedAcrossAllProcessorIds=''
+    hasMoreThanOneId=false
+    
+    while read -r line
+    do
+    
+      governors="`corgiFetchSubstringAfter "$line" 'governors:'`$dataDelimiter"
+      governors="`corgiTrimWhiteSpace "$governors"`"
+
+      if [ -z "$governorsCheckedAcrossAllProcessorIds" ]
+      then
+        governorsCheckedAcrossAllProcessorIds="$governors"
+      else
+                        
+        while corgiHasSubstring "$governors" $dataDelimiter
+        do
+          
+          governor="`corgiFetchSubstringBefore "$governors" $dataDelimiter 'first'`"
+          governor="`corgiTrimWhiteSpace "$governor"`"
+
+          governorsToCheckAgainst="$governorsCheckedAcrossAllProcessorIds"
+
+          while corgiHasSubstring "$governorsToCheckAgainst" $dataDelimiter
+          do
+
+            governorToCheckAgainst="`corgiFetchSubstringBefore "$governorsToCheckAgainst" $dataDelimiter 'first'`"
+            governorToCheckAgainst="`corgiTrimWhiteSpace "$governorToCheckAgainst"`"
+            
+            if [ "$governor" = "$governorToCheckAgainst" ]
+            then
+              
+            
+              if ! corgiStartsWithSubstring "$governorsSharedByAllProcessorIds" "$governor$dataDelimiter" \
+              && ! corgiHasSubstring "$governorsSharedByAllProcessorIds" "$dataDelimiter$governor$dataDelimiter"
+              then
+                governorsSharedByAllProcessorIds="$governorsSharedByAllProcessorIds$governor$dataDelimiter"
+              fi
+            
+              break
+            
+            else
+
+              if corgiStartsWithSubstring "$governorsSharedByAllProcessorIds" "$governor$dataDelimiter"
+              then
+                governorsSharedByAllProcessorIds="`corgiFetchSubstringAfter "$governorsSharedByAllProcessorIds" "$governor$dataDelimiter" 'first'`"
+              else
+                governorsSharedByAllProcessorIds="`corgiReplaceAllOccurrencesOfSubstring "$governorsSharedByAllProcessorIds" "$dataDelimiter$governor$dataDelimiter" $dataDelimiter`"
+              fi
+              
+            fi
+            
+            governorsToCheckAgainst="`corgiFetchSubstringAfter "$governorsToCheckAgainst" $dataDelimiter 'first'`"
+          
+          done
+          
+          governors="`corgiFetchSubstringAfter "$governors" $dataDelimiter 'first'`"
+          
+        done
+            
+        hasMoreThanOneId=true
+        
+      fi  
+          
+    done
+    
+    if [ -z "$governorsSharedByAllProcessorIds" ] && [ $hasMoreThanOneId = false ]
+    then
+      governorsSharedByAllProcessorIds="$governorsCheckedAcrossAllProcessorIds$dataDelimiter"
+    fi
+    
+    while corgiHasSubstring "$governorsSharedByAllProcessorIds" $dataDelimiter
+    do
+    
+      governor="`corgiFetchSubstringBefore "$governorsSharedByAllProcessorIds" $dataDelimiter 'first'`"
+      governor="`corgiTrimWhiteSpace "$governor"`"
+    
+      setGovernorCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setGovernorOnCpus \"$processorIds\" \"$governor\" \"$messagePrefix\"'"
+      cpuOptionsMenuItems="$cpuOptionsMenuItems`corgiObMenuItem "label:$governor" "action:Execute" "command:$setGovernorCommand"`"    
+    
+      governorsSharedByAllProcessorIds="`corgiFetchSubstringAfter "$governorsSharedByAllProcessorIds" $dataDelimiter 'first'`"
+    
+    done
+    
+    echo "`corgiObPipeMenu "content:$cpuOptionsMenuItems"`"
+    exit 0
+    
+  }
+  
+  exit $?
+  
+}
+
+
+buildCpuPerfBiasOptionsMenuItems() {
+  
+  cpuOptionsMenuItems=''
+  
+  processorIds="$1"
+  messagePrefix="$2"
+  
+  numPerformanceBiasOptions=15
+  
+  while [ $numPerformanceBiasOptions -ge 0 ]
+  do
+    
+    perfBiasOption=$numPerformanceBiasOptions
+    perfBiasLabel=$perfBiasOption
+    
+    if [ $perfBiasOption -eq 15 ]
+    then  
+      perfBiasLabel='Max Energy Savings'
+    elif [ $perfBiasOption -eq 0 ]
+    then
+      perfBiasLabel='Max Performance'
+    fi
+    
+    setPerfBiasCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setPerfBiasOnCpus \"$processorIds\" $perfBiasOption \"$messagePrefix\"'"
+    cpuOptionsMenuItems="$cpuOptionsMenuItems`corgiObMenuItem "label:$perfBiasLabel" "action:Execute" "command:$setPerfBiasCommand"`"
+    
+    numPerformanceBiasOptions=$(($numPerformanceBiasOptions - 1))
+    
+  done
+  
+  echo "`corgiObPipeMenu "content:$cpuOptionsMenuItems"`"
+  exit $?
+  
+}
+
+
+buildCpuSettingsMenus() {
+  
+  processorIds="$1"
+  supportsPerfBias=$2
+  menuIdSubId="$3"
+  messagePrefix="$4"
+  
+  if [ $supportsPerfBias != true ]
+  then
+    supportsPerfBias=false
+  fi
+  
+  menuItemsCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuSpeedOptionsMenuItems &quot;$processorIds&quot; &quot;min&quot; &quot;$messagePrefix&quot;'"
+  
+  menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$menuIdSubId-set-min-"`"
+  cpuSettingMenus="`corgiObMenu "id:$menuId" "label:Min" "execute:$menuItemsCommand"`"
+  
+  menuItemsCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuSpeedOptionsMenuItems &quot;$processorIds&quot; &quot;max&quot; &quot;$messagePrefix&quot;'"
+  
+  menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$menuIdSubId-set-max-"`"
+  cpuSettingMenus="$cpuSettingMenus`corgiObMenu "id:$menuId" "label:Max" "execute:$menuItemsCommand"`"
+  
+  menuItemsCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuSpeedOptionsMenuItems &quot;$processorIds&quot; &quot;abs&quot; &quot;$messagePrefix&quot;'"
+          
+  menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$menuIdSubId-set-abs-"`"
+  cpuSettingMenus="$cpuSettingMenus`corgiObMenu "id:$menuId" "label:Abs" "execute:$menuItemsCommand"`"
+  
+  menuItemsCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuGovernorOptionsMenuItems &quot;$processorIds&quot; &quot;$messagePrefix&quot;'"
+  
+  menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$menuIdSubId-set-governor-"`"
+  cpuSettingMenus="$cpuSettingMenus`corgiObMenu "id:$menuId" "label:Governor" "execute:$menuItemsCommand"`"
+  
+  if [ $supportsPerfBias = true ]
+  then
+  
+    menuItemsCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuPerfBiasOptionsMenuItems &quot;$processorIds&quot; &quot;$messagePrefix&quot;'"
+        
+    menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$menuIdSubId-set-perfbias-"`"
+    cpuSettingMenus="$cpuSettingMenus`corgiObMenu "id:$menuId" "label:Performance Bias" "execute:$menuItemsCommand"`"
+  
+  fi
+  
+  echo "$cpuSettingMenus"
+  exit $?
+  
+}
+
+
+buildCpuCoreMenu() {
+  
+  menuContent=''
+  supportsPerfBias=false
+  
+  processorId="$1"
+  coreId="$2"
+  perfBiases="$3"
+  coreThreads="$4"
+  
+  if [ $coreThreads != false ]
+  then
+  
+    coreThreadsMenu=''
+    threadMenus=''
+    
+    auditSamplesCollected=false          
+    sampledBaseAndCeilingSpeedsForAudit=''
+    sampledBaseSpeedForAudit=''
+    sampledCeilingSpeedForAudit=''
+    sampledGovernorForAudit=''
+    sampledBoostStateForAudit=''
+    sampledPerfBiasForAudit=''
+    allBaseSpeedsPassAudit=true
+    allCeilingSpeedsPassAudit=true
+    allGovernorsPassAudit=true
+    allBoostStatesPassAudit=true
+    allPerfBiasesPassAudit=true
+    logicalProcessorAuditIsComplete=false  
+              
+    threadIds="$coreThreads"
+    threadCount=0
+              
+    while corgiHasSubstring "$coreThreads" $dataDelimiter
+    do
+                
+      threadId="`corgiFetchSubstringBefore "$coreThreads" $dataDelimiter 'first'`"
+      threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$processorId-core-$coreId-threads-$threadId&quot; &quot;Thread&quot;'"              
+  
+      threadPerfBias='unsupported'
+  
+      if [ $perfBiases != 'unsupported' ]
+      then  
+      
+        threadPerfBias="`corgiFetchSubstringBefore "$perfBiases" $dataDelimiter 'first'`"
+        perfBiasItemPair="Active Performance Bias:$threadPerfBias"
+        supportsPerfBias=true
+        threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$perfBiasItemPair&quot; &quot;$processorId-core-$coreId-threads-$threadId&quot; &quot;Thread&quot;'"              
+      
+        perfBiases="`corgiFetchSubstringAfter "$perfBiases" $dataDelimiter 'first'`"
+      
+      fi
+    
+  
+      menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-core-$coreId-threads-$threadId-"`"
+      threadMenus="$threadMenus`corgiObMenu "id:$menuId" "label:$threadId" "execute:$threadMenuCommand"`"
+  
+      if [ $auditSamplesCollected = false ]
+      then
+                
+        sampledBaseAndCeilingSpeedsForAudit="`getCpuFrequencyInfo "$threadId" 'user'`"
+        sampledGovernorForAudit="`corgiFetchSubstringAfter "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+        sampledBaseAndCeilingSpeedsForAudit="`corgiFetchSubstringBefore "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+        sampledBaseSpeedForAudit="`corgiFetchSubstringBefore "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+        sampledCeilingSpeedForAudit="`corgiFetchSubstringAfter "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+        sampledBoostStateForAudit="`getCpuBoostState "$threadId"`"
+        sampledPerfBiasForAudit="$threadPerfBias"
+        auditSamplesCollected=true
+                
+      elif [ $logicalProcessorAuditIsComplete = false ]
+      then
+              
+        threadBaseAndCeilingSpeeds="`getCpuFrequencyInfo "$threadId" 'user'`"
+        threadGovernor="`corgiFetchSubstringAfter "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+        threadBaseAndCeilingSpeeds="`corgiFetchSubstringBefore "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+        threadBaseSpeed="`corgiFetchSubstringBefore "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+        threadCeilingSpeed="`corgiFetchSubstringAfter "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+        threadBoostState="`getCpuBoostState "$threadId"`"
+        threadPerfBias="$threadPerfBias"
+                
+        if [ "$threadBaseSpeed" != "$sampledBaseSpeedForAudit" ]
+        then
+          allBaseSpeedsPassAudit=false
+        fi
+              
+        if [ "$threadCeilingSpeed" != "$sampledCeilingSpeedForAudit" ]
+        then
+          allCeilingSpeedsPassAudit=false
+        fi
+                
+        if [ "$threadGovernor" != "$sampledGovernorForAudit" ]
+        then
+          allGovernorsPassAudit=false
+        fi
+              
+        if [ "$threadBoostState" != "$sampledBoostStateForAudit" ]
+        then
+          allBoostStatesPassAudit=false
+        fi
+              
+        if [ $threadPerfBias -ne $sampledPerfBiasForAudit ]
+        then
+          allPerfBiasesPassAudit=false
+        fi
+              
+        if [ $allBaseSpeedsPassAudit = false ] && [ $allCeilingSpeedsPassAudit = false ] \
+        && [ $allGovernorsPassAudit = false ] && [ $allBoostStatesPassAudit = false ] \
+        && [ $allPerfBiasesPassAudit = false ]
+        then
+          logicalProcessorAuditIsComplete=true
+        fi
+                    
+      fi        
+  
+      coreThreads="`corgiFetchSubstringAfter "$coreThreads" $dataDelimiter 'first'`"
+            
+      threadCount=$(($threadCount + 1))
+                
+    done
+              
+    menuContent="`buildCpuActiveDetailMenuItems 'thread' $allBaseSpeedsPassAudit "$sampledBaseSpeedForAudit" \
+    $allCeilingSpeedsPassAudit "$sampledCeilingSpeedForAudit" $allGovernorsPassAudit "$sampledGovernorForAudit" \
+    $allPerfBiasesPassAudit "$sampledPerfBiasForAudit" $allBoostStatesPassAudit "$sampledBoostStateForAudit"`"
+      
+    coreSettingsMenus="`buildCpuSettingsMenus "$threadIds" $supportsPerfBias "$processorId-core-$coreId" "Core $coreId, Thread"`"
+    
+    menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-core-$coreId-set-"`"
+    menuContent="$menuContent`corgiObMenu "id:$menuId" "label:Set (All Threads)" "content:$coreSettingsMenus"`"  
+      
+    menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-core-$coreId-threads-"`"
+    menuContent="$menuContent`corgiObMenu "id:$menuId" "label:Threads ($threadCount)" "content:$threadMenus"`"
+  
+  else
+    
+    menuContent="`buildCpuDetailMenuItems "$coreId" 'user'`"
+  
+    if [ $perfBiases != 'unsupported' ]
+    then
+      supportsPerfBias=true
+      perfBiasItemPair="Active Performance Bias:$perfBiases"
+      menuContent="`buildCpuDetailMenuItems "$coreId" 'user' "$perfBiasItemPair"`"  
+    fi
+    
+    coreSettingsMenus="`buildCpuSettingsMenus "$coreId" $supportsPerfBias "$processorId-core-$coreId" "Core $coreId"`"
+    
+    menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-core-$coreId-set-"`"
+    menuContent="$menuContent`corgiObMenu "id:$menuId" "label:Set" "content:$coreSettingsMenus"`"    
+  
+  fi
+
+  echo "`corgiObPipeMenu "content:$menuContent"`"
+  exit 0
+  
+}
+
+
+buildCpusMenu() {
+   
+  processorIdLabel='physical id'
+  
+  usePhysicalId=$1
+  
+  if [ -z "$usePhysicalId" ]
+  then
+    usePhysicalId=true
+  fi
+  
+  if [ $usePhysicalId = false ]
+  then
+    processorIdLabel='processor'    
+  fi
+  
+  cat /proc/cpuinfo | grep -i "$processorIdLabel" | uniq | {
+    
+    processorMenus=''
+    
+    while read -r line
+    do
+      
+      detailMenuItemsSet=false
+      
+      processorMenu=''
+      coresMenu=''
+      threadsMenu=''
+      
+      processorId="`corgiFetchSubstringAfter "$line" ':' 'first'`"  
+      processorId="`corgiTrimWhiteSpace "$processorId"`"
+      
+      # In the case of a multicore or multithreaded CPU, we will use the core or thread ID,
+      # as the ID for detail reporting...
+      sampledProcessorId=$processorId
+      
+      processorDescriptor="`getCpuInfo "$processorId" $usePhysicalId 'model name' true`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" '(R)'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" '(r)'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" '(TM)'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" '(tm)'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" '@'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" 'CPU'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" 'PROCESSOR'`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" 'processor'`"
+      
+      pulledSpeedDescriptor="`corgiFetchSubstringBetween "$processorDescriptor" ' ' 'Hz' 'last'`"
+      
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" "$pulledSpeedDescriptor"`"
+      processorDescriptor="`corgiRemoveAllOccurrencesOfSubstring "$processorDescriptor" 'Hz'`"
+      processorDescriptor="`corgiTrimWhiteSpace "$processorDescriptor"`"
+      processorDescriptor="$processorId: $processorDescriptor"
+      
+      processorCoreCount="`getCpuInfo "$processorId" $usePhysicalId 'cpu cores' true`"
+      processorSiblingCount="`getCpuInfo "$processorId" $usePhysicalId 'siblings' true`"
+      
+      auditSamplesCollected=false
+      sampledBaseAndCeilingSpeedsForAudit=''
+      sampledBaseSpeedForAudit=''
+      sampledCeilingSpeedForAudit=''
+      sampledGovernorForAudit=''
+      sampledBoostStateForAudit=''
+      sampledPerfBiasForAudit=''
+      allBaseSpeedsPassAudit=true
+      allCeilingSpeedsPassAudit=true
+      allGovernorsPassAudit=true
+      allBoostStatesPassAudit=true
+      allPerfBiasesPassAudit=true
+      logicalProcessorAuditIsComplete=false
+      activeSubsetNotation=''
+      
+      subprocessorIds=''
+      
+      if [ $usePhysicalId = true ] 
+      then
+      
+        if [ ! -z "$processorCoreCount" ] && [ $processorCoreCount -gt 1 ]
+        then
+          
+          # Report coress only if we're reporting physical processors,
+          # else, each logical processor reported is already a core or a thread...
+  
+          # Also, if we're reporting physical processors, and there is only one core,
+          # we will not distinguish between the processor and the core,
+          # as doing so is not particularly meaningful...
+          
+          processorCores="`getCpuInfo "$processorId" $usePhysicalId 'core id'`"
+          subprocessorIds="$processorCores"
+          coreMenus=''
+          
+          while corgiHasSubstring "$processorCores" $dataDelimiter
+          do
+        
+            coreId="`corgiFetchSubstringBefore "$processorCores" $dataDelimiter 'first'`"
+            coreThreads=false
+            corePerfBiases='unsupported'
+            
+            sampledProcessorId=$coreId
+            
+            if [ ! -z "$processorSiblingCount" ] && [ $processorCoreCount -lt $processorSiblingCount ]
+            then
+              
+              # If the number of processor cores is less than the number of processor siblings,
+              # we are, most likely, dealing with a multi-core, multi-threaded processor...
+  
+              coreThreads="`getCpuInfo "$processorId" true 'processor' 'core id' "$coreId"`"
+              perfBiasThreads="$coreThreads"
+              
+              while corgiHasSubstring "$perfBiasThreads" $dataDelimiter
+              do
+                
+                threadId="`corgiFetchSubstringBefore "$perfBiasThreads" $dataDelimiter 'first'`"
+                corePerfBias="`getCpuPowerInfo "$threadId" 'perf-bias'`"
+                    
+                if [ ! -z "$corePerfBias" ]
+                then    
+                  
+                  if [ "$corePerfBiases" = 'unsupported' ]
+                  then
+                    corePerfBiases=''
+                  fi
+                  
+                  corePerfBiases="$corePerfBiases$corePerfBias$dataDelimiter"
+                
+                fi
+                
+                perfBiasThreads="`corgiFetchSubstringAfter "$perfBiasThreads" $dataDelimiter 'first'`"
+              
+              done
+            
+            else
+              
+              corePerfBias="`getCpuPowerInfo "$coreId" 'perf-bias'`"
+              
+              if [ ! -z "$corePerfBias" ]
+              then
+                corePerfBiases="$corePerfBias"
+              else
+                corePerfBias='unsupported'
+              fi
+              
+              if [ $auditSamplesCollected = false ]
+              then
+                
+                sampledBaseAndCeilingSpeedsForAudit="`getCpuFrequencyInfo "$coreId" 'user'`"
+                sampledGovernorForAudit="`corgiFetchSubstringAfter "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+                sampledBaseAndCeilingSpeedsForAudit="`corgiFetchSubstringBefore "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+                sampledBaseSpeedForAudit="`corgiFetchSubstringBefore "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+                sampledCeilingSpeedForAudit="`corgiFetchSubstringAfter "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+                sampledBoostStateForAudit="`getCpuBoostState "$coreId"`"
+                sampledPerfBiasForAudit="$corePerfBias"
+                auditSamplesCollected=true
+                
+              elif [ $logicalProcessorAuditIsComplete = false ]
+              then
+              
+                coreBaseAndCeilingSpeeds="`getCpuFrequencyInfo "$coreId" 'user'`"
+                coreGovernor="`corgiFetchSubstringAfter "$coreBaseAndCeilingSpeeds" "$dataDelimiter"`"
+                coreBaseAndCeilingSpeeds="`corgiFetchSubstringBefore "$coreBaseAndCeilingSpeeds" "$dataDelimiter"`"
+                coreBaseSpeed="`corgiFetchSubstringBefore "$coreBaseAndCeilingSpeeds" "$dataDelimiter"`"
+                coreCeilingSpeed="`corgiFetchSubstringAfter "$coreBaseAndCeilingSpeeds" "$dataDelimiter"`"
+                coreBoostState="`getCpuBoostState "$coreId"`"
+                
+                if [ "$coreBaseSpeed" != "$sampledBaseSpeedForAudit" ]
+                then
+                  allBaseSpeedsPassAudit=false
+                fi
+                
+                if [ "$coreCeilingSpeed" != "$sampledCeilingSpeedForAudit" ]
+                then
+                  allCeilingSpeedsPassAudit=false
+                fi
+                
+                if [ "$coreGovernor" != "$sampledGovernorForAudit" ]
+                then
+                  allGovernorsPassAudit=false
+                fi
+                
+                if [ "$coreBoostState" != "$sampledBoostStateForAudit" ]
+                then
+                  allBoostStatesPassAudit=false
+                fi
+                
+                if [ $corePerfBias -ne $sampledPerfBiasForAudit ]
+                then
+                  allPerfBiasesPassAudit=false
+                fi
+              
+                activeSubsetNotation='core'
+              
+                if [ $allBaseSpeedsPassAudit = false ] && [ $allCeilingSpeedsPassAudit = false ] \
+                && [ $allGovernorsPassAudit = false ] && [ $allBoostStatesPassAudit = false ] \
+                && [ $allPerfBiasesPassAudit = false ]
+                then
+                  logicalProcessorAuditIsComplete=true
+                fi              
+                    
+              fi
+              
+            fi
+            
+            coreMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuCoreMenu &quot;$processorId&quot; &quot;$coreId&quot; &quot;$corePerfBiases&quot; &quot;$coreThreads&quot;'"
+            menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-core-$coreId-"`"
+            coreMenus="$coreMenus`corgiObMenu "id:$menuId" "label:$coreId" "execute:$coreMenuCommand"`"
+    
+            processorCores="`corgiFetchSubstringAfter "$processorCores" $dataDelimiter 'first'`"
+        
+          done
+          
+          menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-cores-"`"
+          coresMenu="`corgiObMenu "id:$menuId" "label:Cores ($processorCoreCount)" "content:$coreMenus"`"
+        
+        fi
+        
+        if [ ! -z "$processorSiblingCount" ] && [ $processorCoreCount -lt $processorSiblingCount ]
+        then
+          
+          # Report logical processors as threads only if we're reporting physical processors,
+          # else, each logical processor reported is already a core or a thread....
+  
+          # Also, if the number of processor cores matches the number of processor siblings,
+          # we are, most likely, dealing with a multi-core, single-threaded processor...
+          
+          processorThreads="`getCpuInfo "$processorId" $usePhysicalId 'processor'`"
+          subprocessorIds="$processorThreads"
+          threadMenus=''
+          
+          while corgiHasSubstring "$processorThreads" $dataDelimiter
+          do
+          
+            threadId="`corgiFetchSubstringBefore "$processorThreads" $dataDelimiter 'first'`"
+            sampledProcessorId=$threadId
+          
+            threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$processorId-threads-$threadId&quot; &quot;Thread&quot;'"
+            
+            threadPerfBias="`getCpuPowerInfo "$threadId" 'perf-bias'`"
+            
+            if [ ! -z "$threadPerfBias" ]
+            then
+              perfBiasItemPair="Active Performance Bias:$threadPerfBias"
+              threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$perfBiasItemPair&quot; &quot;$processorId-threads-$threadId&quot; &quot;Thread&quot;'"              
+            else
+              threadPerfBias='unsupported'
+            fi
+              
+            menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-threads-$threadId-"`"
+            threadMenus="$threadMenus`corgiObMenu "id:$menuId" "label:$threadId" "execute:$threadMenuCommand"`"
+            
+            if [ -z "$sampledBaseAndCeilingSpeedsForAudit" ]
+            then
+                
+              sampledBaseAndCeilingSpeedsForAudit="`getCpuFrequencyInfo "$threadId" 'user'`"
+              sampledGovernorForAudit="`corgiFetchSubstringAfter "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+              sampledBaseAndCeilingSpeedsForAudit="`corgiFetchSubstringBefore "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+              sampledBaseSpeedForAudit="`corgiFetchSubstringBefore "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+              sampledCeilingSpeedForAudit="`corgiFetchSubstringAfter "$sampledBaseAndCeilingSpeedsForAudit" "$dataDelimiter"`"
+              sampledBoostStateForAudit="`getCpuBoostState "$threadId"`"
+              sampledPerfBiasForAudit="$threadPerfBias"
+                
+            elif [ $logicalProcessorAuditIsComplete = false ]
+            then
+              
+              threadBaseAndCeilingSpeeds="`getCpuFrequencyInfo "$threadId" 'user'`"
+              threadGovernor="`corgiFetchSubstringAfter "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+              threadBaseAndCeilingSpeeds="`corgiFetchSubstringBefore "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+              threadBaseSpeed="`corgiFetchSubstringBefore "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+              threadCeilingSpeed="`corgiFetchSubstringAfter "$threadBaseAndCeilingSpeeds" "$dataDelimiter"`"
+              threadBoostState="`getCpuBoostState "$threadId"`"
+                
+              if [ "$threadBaseSpeed" != "$sampledBaseSpeedForAudit" ]
+              then
+                allBaseSpeedsPassAudit=false
+              fi
+              
+              if [ "$threadCeilingSpeed" != "$sampledCeilingSpeedForAudit" ]
+              then
+                allCeilingSpeedsPassAudit=false
+              fi
+                
+              if [ "$threadGovernor" != "$sampledGovernorForAudit" ]
+              then
+                allGovernorsPassAudit=false
+              fi
+              
+              if [ "$threadBoostState" != "$sampledBoostStateForAudit" ]
+              then
+                allBoostStatesPassAudit=false
+              fi
+              
+              if [ $threadPerfBias -ne $sampledPerfBiasForAudit ]
+              then
+                allPerfBiasesPassAudit=false
+              fi
+              
+              activeSubsetNotation='thread'
+              
+              if [ $allBaseSpeedsPassAudit = false ] && [ $allCeilingSpeedsPassAudit = false ] \
+              && [ $allGovernorsPassAudit = false ] && [ $allBoostStatesPassAudit = false ] \
+              && [ $allPerfBiasesPassAudit = false ]
+              then
+                logicalProcessorAuditIsComplete=true
+              fi
+                    
+            fi
+            
+            processorThreads="`corgiFetchSubstringAfter "$processorThreads" $dataDelimiter 'first'`"
+            
+          done
+          
+          menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-threads-"`"
+          threadsMenu="`corgiObMenu "id:$menuId" "label:Threads ($processorSiblingCount)" "content:$threadMenus"`"
+        
+        fi
+      
+      fi
+      
+      if [ $detailMenuItemsSet = false ]
+      then
+        
+        processorDetailMenuItems=''
+        supportsPerfBias=false
+        
+        if [ "$sampledPerfBiasForAudit" != 'unsupported' ]
+        then
+          supportsPerfBias=true
+        fi
+
+        buildCpuDetailMenuItemsOption='all'
+        perfBiasDetailMenuItem="Performance Bias:unsupported"
+        
+        if [ $supportsPerfBias = true ]
+        then
+          perfBiasDetailMenuItem="Performance Bias:supported"  
+        fi        
+        
+        cpuSettingsId="$processorId"
+        cpuSettingsMessagePrefix=''
+        cpuSettingsMenuLabel='Set'
+        
+        if [ $usePhysicalId = true ]
+        then
+          
+          buildCpuDetailMenuItemsOption='primary'
+          cpuSettingsMessagePrefix="Physical CPU $processorId"
+          
+          processorDetailMenuItems="`buildCpuActiveDetailMenuItems "$activeSubsetNotation" $allBaseSpeedsPassAudit \
+          "$sampledBaseSpeedForAudit" $allCeilingSpeedsPassAudit "$sampledCeilingSpeedForAudit" $allGovernorsPassAudit \
+          "$sampledGovernorForAudit" $allPerfBiasesPassAudit "$sampledPerfBiasForAudit" $allBoostStatesPassAudit \
+          "$sampledBoostStateForAudit"`"
+          
+          if [ ! -z "$subprocessorIds" ]
+          then
+            
+            cpuSettingsId="$subprocessorIds"
+
+            case "$activeSubsetNotation" in
+              
+              'core')
+                cpuSettingsMessagePrefix="$cpuSettingsMessagePrefix, Core"
+                cpuSettingsMenuLabel="$cpuSettingsMenuLabel (All Cores)"
+              ;;
+              
+              'thread')
+                cpuSettingsMessagePrefix="$cpuSettingsMessagePrefix, Thread"
+                cpuSettingsMenuLabel="$cpuSettingsMenuLabel (All Threads)"
+              ;; 
+            
+            esac
+          
+          fi
+          
+        else  
+        
+          if [ $supportsPerfBias = true ]
+          then
+            perfBiasDetailMenuItem="Active Performance Bias:`getCpuPowerInfo "$sampledProcessorId" 'perf-bias'`"  
+          fi
+        
+        fi
+        
+        cpuSettingsMenus="`buildCpuSettingsMenus "$cpuSettingsId" $supportsPerfBias "$processorId" "$cpuSettingsMessagePrefix"`"
+        
+        menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-set-"`"
+        cpuSettingsMenu="`corgiObMenu "id:$menuId" "label:$cpuSettingsMenuLabel" "content:$cpuSettingsMenus"`"
+        
+        processorDetailMenuItems="$processorDetailMenuItems`buildCpuDetailMenuItems "$sampledProcessorId" "$buildCpuDetailMenuItemsOption" "$perfBiasDetailMenuItem"`"
+        
+        # We need run this only once, per physical processor, when using a physical processor id,
+        # else, we'll attach menu items for each logical processor...
+        
+        detailMenuItemsSet=$usePhysicalId
+      
+      fi
+      
+      menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-"`"
+      processorMenus="$processorMenus`corgiObMenu "id:$menuId" "label:$processorDescriptor" "content:$processorDetailMenuItems$cpuSettingsMenu$coresMenu$threadsMenu"`"
+    
+    done
+
+    if [ -z "$processorMenus" ]
+    then
+      
+      # If $processorMenus is empty, then we are on older hardware, maybe even an older linux,
+      # and /proc/cpuinfo does not contain physical ids...
+
+      logger "INFO (corgi-openbox-menus-power-management.shlib): System does not support reporting physical processors. Falling back to logical processor reporting..."
+      
+      buildCpusMenu false
+      exit 0
+    
+    fi
+
+    cpuMenuLabel='CPUs'
+    
+    if [ $usePhysicalId = true ]
+    then
+      cpuMenuLabel="$cpuMenuLabel (physical)"
+    else
+      cpuMenuLabel="$cpuMenuLabel (logical)"
+    fi
+
+    menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-"`"
+    cpuMenu="`corgiObMenu "id:$menuId" "label:$cpuMenuLabel" "content:$processorMenus"`"
+    
+    echo "$cpuMenu"
+    exit 0
+    
+  }
+  
+  exit $?
+  
+}

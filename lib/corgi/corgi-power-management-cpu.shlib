@@ -1,0 +1,913 @@
+#!/bin/sh
+
+# Copyright 2016 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
+#
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-power-management-cpu.shlib - Functions used to describe and manage power management and throttling options for CPUs, 
+#                                                  using /proc/cpuinfo and cpupower as backends.
+#
+# v2016.07.17
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-posix-core.shlib
+# Requires: cpupower - for obtaining information describing CPU performance and power saving characteristics,
+#                      as well as setting performance and power saving options
+# Requires: gksudo - to obtain permissions to make changes to CPU performance settings
+# Optional: libnotify - used for informational and success notifications
+
+
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+
+corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
+
+if [ ! -e "$corgiCoreLib" ]
+then
+  logger "ERROR (corgi-power-management-cpu.shlib): The core Corgi library is not present. Exiting..."
+  echo "ERROR (corgi-power-management-cpu.shlib): The core Corgi library is not present. Exiting..."
+  exit 1
+fi
+
+. "$corgiCoreLib"
+
+hasCpuPower=false
+hasGkSudo=false
+hasNotify=false
+
+if ! command -v cpupower > /dev/null
+then
+  logger "ERROR (corgi-power-management-cpu.shlib): cpupower not found. Please install cpupower"
+else 
+  hasCpuPower=true
+fi
+
+if ! command -v gksudo > /dev/null
+then
+  logger "ERROR (corgi-power-management-cpu.shlib): gksudo not found. Please install gksudo"
+else 
+  hasGkSudo=true
+fi
+
+if ! command -v notify-send > /dev/null
+then
+  logger "INFO (corgi-power-management-cpu.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
+else
+  hasNotify=true  
+fi
+
+
+dataDelimiter=','
+
+
+getCpuInfo() {
+  
+  processorIdLabel='processor'
+  
+  processorId="$1"
+  usePhysicalId=$2
+  desiredData="$3"
+  singleSampleOnly=$4
+  
+  whereClauseLabel='_OMITTED_WHERE_CLAUSE_'
+  whereClauseValue=''
+  
+  if [ $# -ge 5 ]
+  then
+    desiredData="$3"
+    whereClauseLabel="$4"
+    whereClauseValue="$5"
+    singleSampleOnly=$6
+  fi
+  
+  if [ -z "$usePhysicalId" ] || [ $usePhysicalId != true ]
+  then
+    usePhysicalId=false
+  fi
+  
+  if [ -z "$singleSampleOnly" ] || [ $singleSampleOnly != true ]
+  then
+    singleSampleOnly=false
+  fi
+  
+  if [ $usePhysicalId = true ]
+  then
+    processorIdLabel='physical id'    
+  fi
+  
+  cat /proc/cpuinfo | {
+    
+    currentProcessorId=''
+    currentWhereClauseValue=''
+    currentDescriptorData=''
+    returnedDescriptorData=''
+    numCores=''
+    
+    while read -r line
+    do
+
+      # Typically, there's an empty line between devices in the response...
+      if [ ! -z "$line" ]
+      then
+        
+        if corgiStartsWithSubstring "$line" "$processorIdLabel"
+        then
+          
+          currentProcessorId="`corgiFetchSubstringAfter "$line" ':' 'first'`"  
+          currentProcessorId="`corgiTrimWhiteSpace "$currentProcessorId"`"
+        
+        elif corgiStartsWithSubstring "$line" "$whereClauseLabel"
+        then
+          
+          currentWhereClauseValue="`corgiFetchSubstringAfter "$line" ':' 'first'`"  
+          currentWhereClauseValue="`corgiTrimWhiteSpace "$currentWhereClauseValue"`"
+          
+        elif corgiStartsWithSubstring "$line" "$desiredData"
+        then
+          
+          currentDescriptorData="`corgiFetchSubstringAfter "$line" ':' 'first'`"  
+          currentDescriptorData="`corgiTrimWhiteSpace "$currentDescriptorData"`"        
+        
+        fi
+      
+      elif [ "$currentProcessorId" = "$processorId" ]
+      then
+
+        if [ "$whereClauseLabel" = '_OMITTED_WHERE_CLAUSE_' ] || [ "$currentWhereClauseValue" = "$whereClauseValue" ]
+        then
+          
+          if [ $singleSampleOnly = true ]
+          then
+            returnedDescriptorData="$currentDescriptorData"
+            break
+          else
+
+            if [ "$desiredData" = 'core id' ] && [ ! -z "$returnedDescriptorData" ]
+            then  
+
+              # Prevent duplicate entries, for configurations in which a processor has multithreaded cores
+              # (This data is taken from /proc/cpuinfo, which groups output by logical processor,
+              # in which case, every processor is a thread, and threads belonging to a core will share that core's id.) 
+
+              if corgiStartsWithSubstring "$returnedDescriptorData" "$currentDescriptorData$dataDelimiter" \
+              || corgiEndsWithSubstring "$returnedDescriptorData" "$dataDelimiter$currentDescriptorData" \
+              || corgiHasSubstring "$returnedDescriptorData" "$dataDelimiter$currentDescriptorData$dataDelimiter"
+              then
+                currentDescriptorData='_OMITTED-DUPLICATE_'  
+              fi
+
+            fi
+            
+            if [ "$currentDescriptorData" != '_OMITTED-DUPLICATE_' ]
+            then
+              currentDescriptorData="`corgiTrimWhiteSpace "$currentDescriptorData"`"
+              returnedDescriptorData="$returnedDescriptorData$currentDescriptorData$dataDelimiter"
+            fi
+          
+          fi
+
+        fi
+      
+      fi
+     
+    done
+    
+    echo "$returnedDescriptorData"
+    exit 0
+    
+  }
+  
+  exit $?
+  
+}
+
+
+getCpuFrequencyInfo() {
+
+  frequencyInfoOption='--hwlimits'
+  
+  processorId="$1"
+  userSetting="$2"
+  
+  if [ ! -z  "$userSetting" ] && [ "$userSetting" = 'user' ]
+  then
+    frequencyInfoOption='--policy'  
+  fi
+  
+  cpupower --cpu "$processorId" frequency-info $frequencyInfoOption | {
+
+    response=''
+    
+    while read -r line
+    do
+      # Speeds are on the last line, and there are, normally, only two lines...
+      response="$line"  
+    done
+    
+    governor=''
+    
+    if [ "$frequencyInfoOption" = '--policy' ]
+    then
+      governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
+      response="`corgiFetchSubstringBefore "$response" ' '`"
+    fi
+    
+    minSpeed="`corgiFetchSubstringBefore "$response" ' '`"
+    speedPrefix="`corgiTrimStringByLength "$minSpeed" 3`"
+    speedSuffix="`corgiFetchSubstringAfter "$minSpeed" "$speedPrefix"`"
+    speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
+    minSpeed="$speedPrefix.$speedSuffix"
+    
+    maxSpeed="`corgiFetchSubstringAfter "$response" ' '`"
+    speedPrefix="`corgiTrimStringByLength "$maxSpeed" 3`"
+    speedSuffix="`corgiFetchSubstringAfter "$maxSpeed" "$speedPrefix"`"
+    speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
+    maxSpeed="$speedPrefix.$speedSuffix"
+    
+    echo "$minSpeed$dataDelimiter$maxSpeed$governor"
+    exit 0
+    
+  }
+  
+  exit $?
+  
+}
+
+
+getCpuPowerInfo() {
+  
+  processorId="$1"
+  desiredData="$2"
+  
+  cpupower --cpu "$processorId" info | {
+    
+    response=''
+    
+    while read -r line
+    do
+      
+      if corgiStartsWithSubstring "$line" "$desiredData"
+      then
+        response="`corgiFetchSubstringAfter "$line" ':' 'first'`"  
+        response="`corgiTrimWhiteSpace "$response"`"
+        break
+      fi
+      
+    done
+    
+    echo "$response"
+    exit 0
+    
+  }
+  
+  exit $?
+  
+}
+
+getMinAndMaxFrequencies() {
+  
+  minSpeed=''
+  maxSpeed=''
+  activeOption=''
+  
+  processorIds="$1"
+  shouldGetActive=$2
+  
+  if [ -z "$shouldGetActive" ] || [ $shouldGetActive != true ]
+  then
+    shouldGetActive=false
+  fi
+  
+  if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+  then
+    processorIds="$processorIds$dataDelimiter"
+  fi
+  
+  if [ $shouldGetActive = true ]
+  then
+    activeOption='user'
+  fi
+  
+  while corgiHasSubstring "$processorIds" $dataDelimiter
+  do
+                
+    processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+    
+    cpuFrequencyInfo="`getCpuFrequencyInfo "$processorId" "$activeOption"`"
+    
+    if [ $shouldGetActive = true ]
+    then
+      cpuFrequencyInfo="`corgiFetchSubstringBefore "$cpuFrequencyInfo" "$dataDelimiter"`"
+    fi
+    
+    processorMinSpeed="`corgiFetchSubstringBefore "$cpuFrequencyInfo" "$dataDelimiter"`"
+    processorMaxSpeed="`corgiFetchSubstringAfter "$cpuFrequencyInfo" "$dataDelimiter"`"
+    
+    if corgiHasSubstring "$processorMinSpeed" '.'
+    then
+      processorMinSpeed="`corgiFetchSubstringBefore "$processorMinSpeed" '.'`"  
+    fi
+  
+    if corgiHasSubstring "$processorMaxSpeed" '.'
+    then
+      processorMaxSpeed="`corgiFetchSubstringBefore "$processorMaxSpeed" '.'`"  
+    fi    
+    
+    if [ -z "$minSpeed" ]
+    then
+      minSpeed=$processorMinSpeed
+      maxSpeed=$processorMaxSpeed
+    else
+    
+      if [ $processorMinSpeed -ge $minSpeed ]
+      then
+        minSpeed=$processorMinSpeed  
+      fi
+      
+      if [ $processorMaxSpeed -le $maxSpeed ]
+      then
+        maxSpeed=$processorMaxSpeed  
+      fi
+      
+    fi
+    
+    processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+
+  done
+  
+  echo "$minSpeed$dataDelimiter$maxSpeed"
+  exit $?
+  
+}
+
+
+setSpeedOnCpus() {
+  
+  response=''
+  hasErrors=false
+  successfulProcessorIds=''
+  failedProcessorIds=''
+  
+  processorIds="$1"
+  option="$2"
+  desiredSpeed="$3"
+  isPercentage=$4
+  messagePrefix="$5"
+
+  if [ "$option" != 'min' ] && [ "$option" != 'max' ] && [ "$option" != 'abs' ]
+  then
+    option='abs'
+  fi
+  
+  if [ $isPercentage != true ]
+  then
+    isPercentage=false
+  fi
+  
+  if [ -z "$messagePrefix" ]
+  then
+    messagePrefix='Processor'
+  fi
+
+  if corgiHasSubstring "$desiredSpeed" '.'
+  then
+    desiredSpeed="`corgiFetchSubstringBefore "$desiredSpeed" '.'`"  
+  fi
+  
+  minAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds"`"
+  minSpeed="`corgiFetchSubstringBefore "$minAndMaxSpeeds" "$dataDelimiter"`"
+  maxSpeed="`corgiFetchSubstringAfter "$minAndMaxSpeeds" "$dataDelimiter"`"  
+  
+  activeMinAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds" true`"
+  activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+  activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+
+  if [ ! -z "$isPercentage" ] && [ $isPercentage = true ]
+  then
+  
+    if [ $desiredSpeed -ge 0 ] && [ $desiredSpeed -le 100 ]
+    then
+      desiredSpeed="`corgiDeriveNumberFromPercentage $desiredSpeed $maxSpeed`"
+    else
+      echo "ERROR (corgi-openbox-menus-power-management.shlib): percentage $desiredSpeed is outside the range of 0 to 100"
+      logger "ERROR (corgi-openbox-menus-power-management.shlib): percentage $desiredSpeed is outside the range of 0 to 100"
+      exit 1      
+    fi  
+    
+  fi
+  
+  if [ $desiredSpeed -lt $minSpeed ] || [ $desiredSpeed -gt $maxSpeed ]
+  then
+    echo "ERROR (corgi-openbox-menus-power-management.shlib): frequency $desiredSpeed MHz is outside the range of $minSpeed MHz to $maxSpeed MHz"
+    logger "ERROR (corgi-openbox-menus-power-management.shlib): frequency $desiredSpeed MHz is outside the range of $minSpeed MHz to $maxSpeed MHz"
+    exit 1
+  fi
+  
+  if corgiEndsWithSubstring "$processorIds" $dataDelimiter
+  then
+    processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+  fi
+    
+  cpuFrequencySetCommand="cpupower --cpu $processorIds frequency-set"
+  cpuFrequency=$desiredSpeed"MHz"
+
+  case "$option" in
+    
+    'abs') cpuFrequencySetCommand="$cpuFrequencySetCommand --min $cpuFrequency --max $cpuFrequency" ;;
+    
+    'min') 
+    
+      if [ $desiredSpeed -gt $activeMaxSpeed ]
+      then
+        echo "ERROR (corgi-openbox-menus-power-management.shlib): desired min frequency $desiredSpeed MHz is greater than the active max of $activeMaxSpeed MHz"
+        logger "ERROR (corgi-openbox-menus-power-management.shlib): desired min frequency $desiredSpeed MHz is greater than the active max of $activeMaxSpeed MHz"
+        exit 1
+      fi    
+    
+      cpuFrequencySetCommand="$cpuFrequencySetCommand --min $cpuFrequency" 
+    
+    ;;  
+    
+    'max') 
+    
+      if [ $desiredSpeed -lt $activeMinSpeed ]
+      then
+        echo "ERROR (corgi-openbox-menus-power-management.shlib): desired max frequency $desiredSpeed MHz is less than the active min of $activeMaxSpeed MHz"
+        logger "ERROR (corgi-openbox-menus-power-management.shlib): desired max frequency $desiredSpeed MHz is less than the active min of $activeMaxSpeed MHz"
+        exit 1
+      fi      
+    
+      cpuFrequencySetCommand="$cpuFrequencySetCommand --max $cpuFrequency" 
+    
+    ;;
+
+  esac
+
+  authenticationMessage="Setting the CPU freqeuncy requires an Administrator's password."
+
+  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
+    
+    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+    then
+      processorIds="$processorIds$dataDelimiter"
+    fi
+  
+    while corgiHasSubstring "$processorIds" $dataDelimiter
+    do
+      
+      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+      
+      activeMinAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds" true`"
+      errorOccurred=false
+        
+      case "$option" in
+        
+        'abs')
+        
+          activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+          activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+          
+          if [ $desiredSpeed -ne $activeMinSpeed ] || [ $desiredSpeed -ne $activeMaxSpeed ]
+          then
+            errorOccurred=true  
+          fi
+          
+        ;;
+          
+        'min')  
+          
+          activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+          
+          if [ $desiredSpeed -ne $activeMinSpeed ]
+          then
+            errorOccurred=true
+          fi
+          
+        ;;
+          
+        'max')
+          
+          activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+  
+          if [ $desiredSpeed -ne $activeMaxSpeed ]
+          then
+            errorOccurred=true
+          fi
+          
+        ;;        
+          
+      esac 
+      
+      if [ $errorOccurred = true ]
+      then
+      
+        if [ -z "$failedProcessorIds" ]
+        then
+          failedProcessorIds="$processorId"  
+        else
+          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
+        fi
+        
+        hasErrors=true
+      
+      else
+        
+        if [ -z "$successfulProcessorIds" ]
+        then
+          successfulProcessorIds="$processorId"  
+        else
+          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
+        fi      
+  
+      fi
+      
+      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+      
+    done
+          
+    if [ "$option" = 'abs' ]
+    then
+      option="an $option"
+    else
+      option="a $option"
+    fi  
+    
+    if [ ! -z "$successfulProcessorIds" ]
+    then
+       
+      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
+      then
+        response="$messagePrefix"'s '        
+        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
+      else
+        response="$messagePrefix $successfulProcessorIds"
+      fi
+      
+      response="$response now set at $option frequency of $desiredSpeed MHz"
+      
+      notify-send -u 'normal' "$response"
+    
+    fi
+    
+    if [ $hasErrors = true ]
+    then
+      
+      response="Failed to set $option frequency of $desiredSpeed Mhz for $messagePrefix"
+      
+      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
+      then
+        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
+      else
+        response="$response $failedProcessorIds"
+      fi
+    
+      notify-send -u 'critical' "$response"
+    
+      echo "ERROR (corgi-openbox-menus-power-management.shlib): speed configuration for processors $failedProcessorIds has failed"
+      logger "ERROR (corgi-openbox-menus-power-management.shlib): speed configuration for processors $failedProcessorIds has failed"
+  
+    fi
+    
+    exit 0
+        
+  }  
+  
+  exit $?
+  
+}
+
+
+setGovernorOnCpus() {
+  
+  response=''
+  hasErrors=false
+  successfulProcessorIds=''
+  failedProcessorIds=''
+  
+  processorIds="$1"
+  desiredGovernor="$2"
+  messagePrefix="$3"
+  
+  governors="`cpupower --cpu "$processorIds" frequency-info | grep 'governors:'`"
+  governors="`corgiFetchSubstringAfter "$governors" 'governors:'`$dataDelimiter"
+  desiredGovernorMatchesAvailableGovernor=false
+  
+  while corgiHasSubstring "$governors" $dataDelimiter
+  do
+    
+    governor="`corgiFetchSubstringBefore "$governors" $dataDelimiter 'first'`"
+    governor="`corgiTrimWhiteSpace "$governor"`"
+    
+    if [ "$desiredGovernor" = "$governor" ]
+    then
+      desiredGovernorMatchesAvailableGovernor=true      
+    fi
+    
+    governors="`corgiFetchSubstringAfter "$governors" $dataDelimiter 'first'`"
+    
+  done
+  
+  if [ $desiredGovernorMatchesAvailableGovernor = false ]
+  then
+    echo "ERROR (corgi-openbox-menus-power-management.shlib): governor $desiredGovernor is not an available option"
+    logger "ERROR (corgi-openbox-menus-power-management.shlib): governor $desiredGovernor is not an available option"
+    exit 1
+  fi
+  
+  if [ -z "$messagePrefix" ]
+  then
+    messagePrefix='Processor'
+  fi  
+  
+  if corgiEndsWithSubstring "$processorIds" $dataDelimiter
+  then
+    processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+  fi
+    
+  cpuFrequencySetCommand="cpupower --cpu $processorIds frequency-set --governor $desiredGovernor"
+  authenticationMessage="Setting the CPU performance bias requires an Administrator's password."
+
+  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
+    
+    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+    then
+      processorIds="$processorIds$dataDelimiter"
+    fi
+  
+    while corgiHasSubstring "$processorIds" $dataDelimiter
+    do
+      
+      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+      
+      activeCpuFrequencyInfo="`getCpuFrequencyInfo "$processorId" 'user'`"
+      activeGovernor="`corgiFetchSubstringAfter "$activeCpuFrequencyInfo" "$dataDelimiter"`"
+      errorOccurred=false
+      
+      if [ "$desiredGovernor" != "$activeGovernor" ]
+      then
+      
+        if [ -z "$failedProcessorIds" ]
+        then
+          failedProcessorIds="$processorId"  
+        else
+          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
+        fi
+        
+        hasErrors=true
+      
+      else
+        
+        if [ -z "$successfulProcessorIds" ]
+        then
+          successfulProcessorIds="$processorId"  
+        else
+          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
+        fi      
+  
+      fi
+      
+      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+      
+    done
+    
+    if [ ! -z "$successfulProcessorIds" ]
+    then
+       
+      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
+      then
+        response="$messagePrefix"'s '
+        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
+      else
+        response="$messagePrefix $successfulProcessorIds"
+      fi
+      
+      response="$response governor now set to $desiredGovernor"
+      
+      notify-send -u 'normal' "$response"
+    
+    fi
+    
+    if [ $hasErrors = true ]
+    then
+      
+      response="Failed to set governor to $desiredGovernor for $messagePrefix"
+      
+      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
+      then
+        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
+      else
+        response="$response $failedProcessorIds"
+      fi
+    
+      notify-send -u 'critical' "$response"
+    
+      echo "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
+      logger "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
+  
+    fi
+    
+    exit 0  
+    
+  }
+  
+  exit $?
+  
+}
+
+
+setPerfBiasOnCpus() {
+  
+  response=''
+  hasErrors=false
+  successfulProcessorIds=''
+  failedProcessorIds=''
+  
+  processorIds="$1"
+  desiredPerfBias=$2
+  messagePrefix="$3"
+  
+  if [ $desiredPerfBias -lt 0 ] || [ $desiredPerfBias -gt 15 ]
+  then
+    echo "ERROR (corgi-openbox-menus-power-management.shlib): performance bias $desiredPerfBias is outside the range of 0 to 15"
+    logger "ERROR (corgi-openbox-menus-power-management.shlib): performance bias $desiredPerfBias is outside the range of 0 to 15"
+    exit 1
+  fi
+  
+  if [ -z "$messagePrefix" ]
+  then
+    messagePrefix='Processor'
+  fi  
+  
+  if corgiEndsWithSubstring "$processorIds" $dataDelimiter
+  then
+    processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+  fi
+    
+  cpuFrequencySetCommand="cpupower --cpu $processorIds set --perf-bias $desiredPerfBias"
+  authenticationMessage="Setting the CPU performance bias requires an Administrator's password."
+
+  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
+    
+    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+    then
+      processorIds="$processorIds$dataDelimiter"
+    fi
+  
+    while corgiHasSubstring "$processorIds" $dataDelimiter
+    do
+      
+      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+      
+      activePerfBias="`getCpuPowerInfo "$processorId" 'perf-bias'`"
+      errorOccurred=false
+      
+      if [ $desiredPerfBias -ne $activePerfBias ]
+      then
+      
+        if [ -z "$failedProcessorIds" ]
+        then
+          failedProcessorIds="$processorId"  
+        else
+          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
+        fi
+        
+        hasErrors=true
+      
+      else
+        
+        if [ -z "$successfulProcessorIds" ]
+        then
+          successfulProcessorIds="$processorId"  
+        else
+          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
+        fi      
+  
+      fi
+      
+      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+      
+    done
+    
+    if [ ! -z "$successfulProcessorIds" ]
+    then
+       
+      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
+      then
+        response="$messagePrefix"'s '
+        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
+      else
+        response="$messagePrefix $successfulProcessorIds"
+      fi
+      
+      response="$response now set at a performance bias of $desiredPerfBias"
+      
+      notify-send -u 'normal' "$response"
+    
+    fi
+    
+    if [ $hasErrors = true ]
+    then
+      
+      response="Failed to set performance bias to $desiredPerfBias for $messagePrefix"
+      
+      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
+      then
+        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
+      else
+        response="$response $failedProcessorIds"
+      fi
+    
+      notify-send -u 'critical' "$response"
+    
+      echo "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
+      logger "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
+  
+    fi
+    
+    exit 0  
+    
+  }
+  
+  exit $?
+  
+}
+
+
+cpuHasBoostSupport() {
+  
+  processorId="$1"
+  
+  boostStateSupportStatus="`cpupower --cpu "$processorId" frequency-info | grep 'Supported'`"
+  boostStateSupportStatus="`corgiFetchSubstringAfter "$boostStateSupportStatus" ':' 'first'`"
+  boostStateSupportStatus="`corgiTrimWhiteSpace "$boostStateSupportStatus"`"
+
+  if [ "$boostStateSupportStatus" = 'yes' ]
+  then
+    return 0
+  fi
+  
+  return 1
+  
+}
+
+getCpuBoostState() {
+  
+  state='unsupported'
+  
+  processorId="$1"
+  beSpecific=$2
+  
+  if [ -z "$beSpecific" ] || [ $beSpecific != false ]
+  then
+    beSpecific=true
+  fi
+
+  if cpuHasBoostSupport "$processorId"
+  then  
+      
+    if [ $beSpecific = true ]
+    then
+      
+      boostState="`cpupower --cpu "$processorId" frequency-info | grep 'Active'`"
+      boostState="`corgiFetchSubstringAfter "$boostState" ':' 'first'`"
+      boostState="`corgiTrimWhiteSpace "$boostState"`"
+            
+      if [ "$boostState" = 'yes' ]
+      then
+        state='enabled'  
+      else
+        state='disabled'  
+      fi
+      
+    else
+      state='supported'    
+    fi
+    
+  fi
+  
+  echo "$state"
+  exit $?
+  
+}

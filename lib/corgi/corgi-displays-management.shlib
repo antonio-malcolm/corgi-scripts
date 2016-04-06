@@ -24,6 +24,7 @@
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
+
 corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
 
 if [ ! -e "$corgiCoreLib" ]
@@ -34,6 +35,15 @@ then
 fi
 
 . "$corgiCoreLib"
+
+hasXrandr=false
+
+if ! command -v xrandr > /dev/null
+then
+  logger "ERROR (corgi-displays-manager.shlib): xrandr not found. Please install xrandr"
+else 
+  hasXrandr=true
+fi
 
 connectionDataDelimiter=','
 
@@ -663,8 +673,8 @@ setDisplayBrightnessImpl() {
         echo $amount > $brightness
         result=$?
       else
-        echo "ERROR (corgi-backlight-screen): percent $amount is outside the range of 0 to 100"
-        logger "ERROR (corgi-backlight-screen): percent $amount is outside the range of 0 to 100"        
+        echo "ERROR (corgi-backlight-screen): percentage $amount is outside the range of 0 to 100"
+        logger "ERROR (corgi-backlight-screen): percentage $amount is outside the range of 0 to 100"        
       fi
 
     ;;

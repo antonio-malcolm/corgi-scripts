@@ -12,15 +12,16 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-samba - Generates an Openbox Pipemenu for managing a samba server, as well as connections, as a client, to samba shares, using samba and smbclient as backends.
+# corgi-openbox-menus-samba - Generates an Openbox Pipemenu for managing a samba server, as well as connections, as a client, 
+#                             to samba shares, using samba and smbclient as backends.
 #
 # v2015.06.17
 #
 # Authored by Antonio Malcolm
 #
-# Requires: corgi-openbox-menus-samba.shlib
-# Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
-# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
+# Requires: corgi-openbox-menus-displays.shlib
+# Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-displays.shlib)
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-displays.shlib)
 
 exitStatus=1
 currentDirectory="`dirname "$0"`"
@@ -38,17 +39,7 @@ fi
 . "$corgiObMenusDisplaysLib"
 
 pipeMenu=''
-
-if ! command -v xrandr > /dev/null
-then
-  logger "ERROR (corgi-openbox-menus-displays): xrandr command not found. Please install xrandr"
-  pipeMenu=`corgiObMenuItem "label:displays menu requires xrandr..."`
-else
-
-  pipeMenu="`buildDisplaysMenu "$@"`"
-
-fi
-
+pipeMenu="`buildDisplaysMenu "$@"`"
 pipeMenu="`corgiObPipeMenu "content:$pipeMenu"`"
 exitStatus=$?
 

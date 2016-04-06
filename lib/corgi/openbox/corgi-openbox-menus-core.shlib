@@ -24,6 +24,9 @@
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
+
+parentDirectory='/home/antonio/Projects/corgi-scripts'
+
 corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
 
 if [ ! -e "$corgiCoreLib" ]

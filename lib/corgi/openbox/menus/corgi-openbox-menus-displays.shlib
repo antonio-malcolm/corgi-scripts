@@ -12,14 +12,17 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-displays.shlib - Functions used to generate Openbox menus and items for describing and managing X screens and display connections, using xrandr and lspci as backends.
+# corgi-openbox-menus-displays.shlib - Functions used to generate Openbox menus and items for describing and managing X screens and display connections, 
+#                                      using xrandr and lspci as backends.
 #
 # v2015.07.17
 #
 # Authored by Antonio Malcolm
 #
+# 
 # Requires: corgi-openbox-menus-core.shlib
-# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib)
+# Requires: corgi-displays-management.shlib
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib or corgi-displays-management.shlib)
 # Requires: xrandr - for reporting available display resolutions and making changes
 # Requires: lspci - for obtaining device information
 # Requires: zenity - if we plan on setting values for scale, DPI, and panning, tracking and borders
@@ -29,6 +32,7 @@
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
+
 corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
 corgiDisplaysManagementLib="$parentDirectory/lib/corgi/corgi-displays-management.shlib"
 
@@ -1050,6 +1054,12 @@ appendConnectionMenus() {
 # Generates and echoes an Openbox pipe menu consisting of data which describes available GPU hardware, 
 # X screens, display connections, and xrandr options available for the manipulation of available screens and connections.
 buildDisplaysMenu() {
+	
+	if [ $hasXrandr = false ]
+	then
+  	echo "`corgiObMenuItem "label:displays menu requires xrandr..."`"
+  	exit 1
+	fi
 
   connectionNamesToPass="$1"
   primaryConnectionNameToPass="$2"

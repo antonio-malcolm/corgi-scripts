@@ -32,6 +32,7 @@ exitStatus=1
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
+
 corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
 
 if [ ! -e "$corgiObMenuLib" ]
@@ -1349,7 +1350,7 @@ toggleConnectionState() {
       else
 
         errorMsg="`corgiFetchSubstringAfter "$response" '-'`"
-        errorMsg="`corgiTrimString "$response"`"
+        errorMsg="`corgiTrimWhiteSpace "$response"`"
 
         logger "ERROR (corgi-openbox-menus-networkmanager.shlib): Couldn't toggle connection state to '$state' for '$name' - $errorMsg."
 
@@ -1500,7 +1501,7 @@ parseWifiConnectionResponse() {
       tryAgain=false
 
       errorMsg="`corgiFetchSubstringAfter "$response" '-'`"
-      errorMsg="`corgiTrimString "$response"`"
+      errorMsg="`corgiTrimWhiteSpace "$response"`"
 
       logger "ERROR (corgi-openbox-menus-networkmanager.shlib): Couldn't enable wifi connection - $errorMsg."
 
@@ -1985,6 +1986,9 @@ buildDeviceProfileMenuItem() {
 
   deviceMenuItem=''
   fieldId="$1"
+  
+  fieldId="`corgiFetchSubstringBefore "$fieldId" ':' 'first'`"
+	fieldId="`corgiTrimWhiteSpace "$fieldId"`"
 
   shift
 
@@ -1992,13 +1996,13 @@ buildDeviceProfileMenuItem() {
   value='--'
 
   case "$fieldId" in
-    'WIRED-PROPERTIES.CARRIER:') label='Carrier Status' ;;
-    'IP4.ADDRESS[1]:') label='IPv4 Address' ;;
-    'IP4.GATEWAY:') label='IPv4 Gateway' ;;
-    'IP4.DNS[1]:') label='IPv4 DNS' ;;
-    'IP4.DOMAIN[1]:') label='IPv4 Domain' ;;
-    'IP6.ADDRESS[1]:') label='IPv6 Address' ;;
-    'IP6.GATEWAY:') label='IPv6 Gateway' ;;
+    'WIRED-PROPERTIES.CARRIER') label='Carrier Status' ;;
+    'IP4.ADDRESS[1]') label='IPv4 Address' ;;
+    'IP4.GATEWAY') label='IPv4 Gateway' ;;
+    'IP4.DNS[1]') label='IPv4 DNS' ;;
+    'IP4.DOMAIN[1]') label='IPv4 Domain' ;;
+    'IP6.ADDRESS[1]') label='IPv6 Address' ;;
+    'IP6.GATEWAY') label='IPv6 Gateway' ;;
   esac
 
   # We want to produce items only for those fields listed in the above case...
@@ -2043,6 +2047,9 @@ buildDeviceProfileMenuItemGeneral() {
 
   deviceMenuItem=''
   fieldId="$1"
+  
+  fieldId="`corgiFetchSubstringBefore "$fieldId" ':' 'first'`"
+	fieldId="`corgiTrimWhiteSpace "$fieldId"`"
 
   shift
 
@@ -2050,20 +2057,20 @@ buildDeviceProfileMenuItemGeneral() {
   value='--'
 
   case "$fieldId" in
-    'GENERAL.VENDOR:') label='Vendor' ;;
-    'GENERAL.PRODUCT:') label='Product Name' ;;
-    'GENERAL.DRIVER:') label='Driver' ;;
-    'GENERAL.DRIVER-VERSION:') label='Driver Version' ;;
-    'GENERAL.HWADDR:') label='MAC Address' ;;
-    'GENERAL.MTU:') label='MTU' ;;
-    'GENERAL.STATE:') label='State' ;;
-    'GENERAL.CONNECTION:') label='Connection Name' ;;
-#    'GENERRAL.UDI:') label='Device ID' ;;
-    'GENERAL.CON-UUID:') label='Connection UUID' ;;
-    'GENERAL.CON-PATH:') label='Connection Path' ;;
-    'GENERAL.IS-SOFTWARE:') label='Is Software' ;;
-    'GENERAL.NM-MANAGED:') label='Managed by NetworkManager' ;;
-    'GENERAL.AUTOCONNECT:') label='Autoconnect' ;;
+    'GENERAL.VENDOR') label='Vendor' ;;
+    'GENERAL.PRODUCT') label='Product Name' ;;
+    'GENERAL.DRIVER') label='Driver' ;;
+    'GENERAL.DRIVER-VERSION') label='Driver Version' ;;
+    'GENERAL.HWADDR') label='MAC Address' ;;
+    'GENERAL.MTU') label='MTU' ;;
+    'GENERAL.STATE') label='State' ;;
+    'GENERAL.CONNECTION') label='Connection Name' ;;
+#    'GENERRAL.UDI') label='Device ID' ;;
+    'GENERAL.CON-UUID') label='Connection UUID' ;;
+    'GENERAL.CON-PATH') label='Connection Path' ;;
+    'GENERAL.IS-SOFTWARE') label='Is Software' ;;
+    'GENERAL.NM-MANAGED') label='Managed by NetworkManager' ;;
+    'GENERAL.AUTOCONNECT') label='Autoconnect' ;;
   esac
 
   # We want to produce items only for those fields listed in the above case...
@@ -2087,7 +2094,7 @@ buildDeviceProfileMenuItemGeneral() {
 
     deviceMenuItem="`corgiObMenuItem "label:$label: $value"`"
 
-    if [ "$fieldId" = 'GENERAL.STATE:' ]
+    if [ "$fieldId" = 'GENERAL.STATE' ]
     then
 
       status='enabled'
@@ -2200,9 +2207,7 @@ buildDeviceProfilesMenu() {
         if corgiStartsWithSubstring "$line" 'GENERAL.DEVICE'
         then
           currentDeviceName="`getFieldValueFromPair $line`"
-        fi
-
-        if corgiStartsWithSubstring "$line" 'GENERAL.TYPE'
+        elif corgiStartsWithSubstring "$line" 'GENERAL.TYPE'
         then
 
           currentDeviceType="`getFieldValueFromPair $line`"
