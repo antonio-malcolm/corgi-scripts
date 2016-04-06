@@ -12,8 +12,7 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-samba - Generates an Openbox Pipemenu for managing a samba server, as well as connections, as a client, 
-#                             to samba shares, using samba and smbclient as backends.
+# corgi-openbox-menus-displays - Generates an Openbox menu for describing and managing X screens and display connections.
 #
 # v2015.06.17
 #
