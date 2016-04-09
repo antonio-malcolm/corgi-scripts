@@ -56,14 +56,14 @@ hasNotify=false
 
 if ! command -v cpupower > /dev/null
 then
-  logger "ERROR (corgi-openbox-menus-power-management.shlib): cpupower not found. Please install cpupower"
+  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): cpupower not found. Please install cpupower"
 else 
   hasCpuPower=true
 fi
 
 if ! command -v notify-send > /dev/null
 then
-  logger "INFO (corgi-openbox-menus-power-management.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
+  logger "INFO (corgi-openbox-menus-power-management-cpu.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
 else
   hasNotify=true  
 fi
@@ -1253,7 +1253,7 @@ buildCpusMenu() {
       # If $processorMenus is empty, then we are on older hardware, maybe even an older linux,
       # and /proc/cpuinfo does not contain physical ids...
 
-      logger "INFO (corgi-openbox-menus-power-management.shlib): System does not support reporting physical processors. Falling back to logical processor reporting..."
+      logger "INFO (corgi-openbox-menus-power-management-cpu.shlib): System does not support reporting physical processors. Falling back to logical processor reporting..."
       
       buildCpusMenu false
       exit 0

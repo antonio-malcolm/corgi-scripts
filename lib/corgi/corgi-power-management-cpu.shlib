@@ -351,12 +351,71 @@ getMinAndMaxFrequencies() {
 }
 
 
+cpuHasBoostSupport() {
+  
+  processorId="$1"
+  
+  boostStateSupportStatus="`cpupower --cpu "$processorId" frequency-info | grep 'Supported'`"
+  boostStateSupportStatus="`corgiFetchSubstringAfter "$boostStateSupportStatus" ':' 'first'`"
+  boostStateSupportStatus="`corgiTrimWhiteSpace "$boostStateSupportStatus"`"
+
+  if [ "$boostStateSupportStatus" = 'yes' ]
+  then
+    return 0
+  fi
+  
+  return 1
+  
+}
+
+getCpuBoostState() {
+  
+  state='unsupported'
+  
+  processorId="$1"
+  beSpecific=$2
+  
+  if [ -z "$beSpecific" ] || [ $beSpecific != false ]
+  then
+    beSpecific=true
+  fi
+
+  if cpuHasBoostSupport "$processorId"
+  then  
+      
+    if [ $beSpecific = true ]
+    then
+      
+      boostState="`cpupower --cpu "$processorId" frequency-info | grep 'Active'`"
+      boostState="`corgiFetchSubstringAfter "$boostState" ':' 'first'`"
+      boostState="`corgiTrimWhiteSpace "$boostState"`"
+            
+      if [ "$boostState" = 'yes' ]
+      then
+        state='enabled'  
+      else
+        state='disabled'  
+      fi
+      
+    else
+      state='supported'    
+    fi
+    
+  fi
+  
+  echo "$state"
+  exit $?
+  
+}
+
+
 setSpeedOnCpus() {
   
   response=''
   hasErrors=false
   successfulProcessorIds=''
   failedProcessorIds=''
+  messageSuffix=''
   
   processorIds="$1"
   option="$2"
@@ -395,22 +454,20 @@ setSpeedOnCpus() {
   if [ ! -z "$isPercentage" ] && [ $isPercentage = true ]
   then
   
-    if [ $desiredSpeed -ge 0 ] && [ $desiredSpeed -le 100 ]
+    if [ $desiredSpeed -gt 0 ] && [ $desiredSpeed -le 100 ]
     then
       desiredSpeed="`corgiDeriveNumberFromPercentage $desiredSpeed $maxSpeed`"
     else
-      echo "ERROR (corgi-openbox-menus-power-management.shlib): percentage $desiredSpeed is outside the range of 0 to 100"
-      logger "ERROR (corgi-openbox-menus-power-management.shlib): percentage $desiredSpeed is outside the range of 0 to 100"
-      exit 1      
+    	hasErrors=true
+      messageSuffix="percentage $desiredSpeed is outside the range of 1 to 100"    
     fi  
     
   fi
   
   if [ $desiredSpeed -lt $minSpeed ] || [ $desiredSpeed -gt $maxSpeed ]
   then
-    echo "ERROR (corgi-openbox-menus-power-management.shlib): frequency $desiredSpeed MHz is outside the range of $minSpeed MHz to $maxSpeed MHz"
-    logger "ERROR (corgi-openbox-menus-power-management.shlib): frequency $desiredSpeed MHz is outside the range of $minSpeed MHz to $maxSpeed MHz"
-    exit 1
+  	hasErrors=true
+    messageSuffix="frequency $desiredSpeed MHz is outside the range of $minSpeed MHz to $maxSpeed MHz"
   fi
   
   if corgiEndsWithSubstring "$processorIds" $dataDelimiter
@@ -429,12 +486,11 @@ setSpeedOnCpus() {
     
       if [ $desiredSpeed -gt $activeMaxSpeed ]
       then
-        echo "ERROR (corgi-openbox-menus-power-management.shlib): desired min frequency $desiredSpeed MHz is greater than the active max of $activeMaxSpeed MHz"
-        logger "ERROR (corgi-openbox-menus-power-management.shlib): desired min frequency $desiredSpeed MHz is greater than the active max of $activeMaxSpeed MHz"
-        exit 1
-      fi    
-    
-      cpuFrequencySetCommand="$cpuFrequencySetCommand --min $cpuFrequency" 
+      	hasErrors=true
+        messageSuffix="desired min frequency $desiredSpeed MHz is greater than the active max of $activeMaxSpeed MHz"
+      else
+      	cpuFrequencySetCommand="$cpuFrequencySetCommand --min $cpuFrequency"
+      fi
     
     ;;  
     
@@ -442,16 +498,37 @@ setSpeedOnCpus() {
     
       if [ $desiredSpeed -lt $activeMinSpeed ]
       then
-        echo "ERROR (corgi-openbox-menus-power-management.shlib): desired max frequency $desiredSpeed MHz is less than the active min of $activeMaxSpeed MHz"
-        logger "ERROR (corgi-openbox-menus-power-management.shlib): desired max frequency $desiredSpeed MHz is less than the active min of $activeMaxSpeed MHz"
-        exit 1
-      fi      
-    
-      cpuFrequencySetCommand="$cpuFrequencySetCommand --max $cpuFrequency" 
+      	hasErrors=true
+        messageSuffix="desired max frequency $desiredSpeed MHz is less than the active min of $activeMaxSpeed MHz"
+      else
+      	cpuFrequencySetCommand="$cpuFrequencySetCommand --max $cpuFrequency"
+      fi       
     
     ;;
 
   esac
+  
+  if [ $hasErrors = true ]
+  then
+    
+  	response="Failed to set frequency, for"
+  	
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then
+   	  response="$response $messagePrefix"'s '	
+    else
+      response="$response $messagePrefix"
+    fi
+    
+    response=" $processorIds, $messageSuffix"	
+  	
+  	notify-send -u 'critical' "$response"
+    echo "ERROR (corgi-power-management-cpu.shlib): $response"
+    logger "ERROR (corgi-power-management-cpu.shlib): $response"
+    
+    exit 1     
+    
+  fi  
 
   authenticationMessage="Setting the CPU freqeuncy requires an Administrator's password."
 
@@ -555,7 +632,7 @@ setSpeedOnCpus() {
         response="$messagePrefix $successfulProcessorIds"
       fi
       
-      response="$response now set at $option frequency of $desiredSpeed MHz"
+      response="$response now set to $option frequency of $desiredSpeed MHz"
       
       notify-send -u 'normal' "$response"
     
@@ -564,7 +641,7 @@ setSpeedOnCpus() {
     if [ $hasErrors = true ]
     then
       
-      response="Failed to set $option frequency of $desiredSpeed Mhz for $messagePrefix"
+      response="Failed to set $option frequency of $desiredSpeed Mhz, for $messagePrefix"
       
       if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
       then
@@ -576,9 +653,8 @@ setSpeedOnCpus() {
       fi
     
       notify-send -u 'critical' "$response"
-    
-      echo "ERROR (corgi-openbox-menus-power-management.shlib): speed configuration for processors $failedProcessorIds has failed"
-      logger "ERROR (corgi-openbox-menus-power-management.shlib): speed configuration for processors $failedProcessorIds has failed"
+      echo "ERROR (corgi-power-management-cpu.shlib): $response"
+      logger "ERROR (corgi-power-management-cpu.shlib): $response"
   
     fi
     
@@ -602,6 +678,11 @@ setGovernorOnCpus() {
   desiredGovernor="$2"
   messagePrefix="$3"
   
+  if [ -z "$messagePrefix" ]
+  then
+    messagePrefix='Processor'
+  fi  
+  
   governors="`cpupower --cpu "$processorIds" frequency-info | grep 'governors:'`"
   governors="`corgiFetchSubstringAfter "$governors" 'governors:'`$dataDelimiter"
   desiredGovernorMatchesAvailableGovernor=false
@@ -623,15 +704,25 @@ setGovernorOnCpus() {
   
   if [ $desiredGovernorMatchesAvailableGovernor = false ]
   then
-    echo "ERROR (corgi-openbox-menus-power-management.shlib): governor $desiredGovernor is not an available option"
-    logger "ERROR (corgi-openbox-menus-power-management.shlib): governor $desiredGovernor is not an available option"
-    exit 1
+  	
+  	response="Failed to set governor, for"
+  	
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then
+   	  response="$response $messagePrefix"'s '	
+    else
+      response="$response $messagePrefix"
+    fi
+    
+    response=" $processorIds, \"$desiredGovernor\" is not an available option"	
+  	
+  	notify-send -u 'critical' "$response"
+    echo "ERROR (corgi-power-management-cpu.shlib): $response"
+    logger "ERROR (corgi-power-management-cpu.shlib): $response"
+    
+    exit 1  
+
   fi
-  
-  if [ -z "$messagePrefix" ]
-  then
-    messagePrefix='Processor'
-  fi  
   
   if corgiEndsWithSubstring "$processorIds" $dataDelimiter
   then
@@ -697,7 +788,7 @@ setGovernorOnCpus() {
         response="$messagePrefix $successfulProcessorIds"
       fi
       
-      response="$response governor now set to $desiredGovernor"
+      response="$response, governor now set to $desiredGovernor"
       
       notify-send -u 'normal' "$response"
     
@@ -706,7 +797,7 @@ setGovernorOnCpus() {
     if [ $hasErrors = true ]
     then
       
-      response="Failed to set governor to $desiredGovernor for $messagePrefix"
+      response="Failed to set governor, to $desiredGovernor, for $messagePrefix"
       
       if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
       then
@@ -718,9 +809,8 @@ setGovernorOnCpus() {
       fi
     
       notify-send -u 'critical' "$response"
-    
-      echo "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
-      logger "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
+      echo "ERROR (corgi-power-management-cpu.shlib): $response"
+      logger "ERROR (corgi-power-management-cpu.shlib): $response"
   
     fi
     
@@ -744,16 +834,31 @@ setPerfBiasOnCpus() {
   desiredPerfBias=$2
   messagePrefix="$3"
   
-  if [ $desiredPerfBias -lt 0 ] || [ $desiredPerfBias -gt 15 ]
-  then
-    echo "ERROR (corgi-openbox-menus-power-management.shlib): performance bias $desiredPerfBias is outside the range of 0 to 15"
-    logger "ERROR (corgi-openbox-menus-power-management.shlib): performance bias $desiredPerfBias is outside the range of 0 to 15"
-    exit 1
-  fi
-  
   if [ -z "$messagePrefix" ]
   then
     messagePrefix='Processor'
+  fi
+  
+  if [ $desiredPerfBias -lt 0 ] || [ $desiredPerfBias -gt 15 ]
+  then
+  	
+  	response="Failed to set performance bias, for"
+  	
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then
+   	  response="$response $messagePrefix"'s '	
+    else
+      response="$response $messagePrefix"
+    fi
+    
+    response=" $processorIds, $desiredPerfBias is outside the range of 0 to 15"	
+  	
+  	notify-send -u 'critical' "$response"
+    echo "ERROR (corgi-power-management-cpu.shlib): $response"
+    logger "ERROR (corgi-power-management-cpu.shlib): $response"
+    
+    exit 1
+
   fi  
   
   if corgiEndsWithSubstring "$processorIds" $dataDelimiter
@@ -819,7 +924,7 @@ setPerfBiasOnCpus() {
         response="$messagePrefix $successfulProcessorIds"
       fi
       
-      response="$response now set at a performance bias of $desiredPerfBias"
+      response="$response now set to a performance bias of $desiredPerfBias"
       
       notify-send -u 'normal' "$response"
     
@@ -828,7 +933,7 @@ setPerfBiasOnCpus() {
     if [ $hasErrors = true ]
     then
       
-      response="Failed to set performance bias to $desiredPerfBias for $messagePrefix"
+      response="Failed to set performance bias, to $desiredPerfBias, for $messagePrefix"
       
       if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
       then
@@ -840,9 +945,8 @@ setPerfBiasOnCpus() {
       fi
     
       notify-send -u 'critical' "$response"
-    
-      echo "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
-      logger "ERROR (corgi-openbox-menus-power-management.shlib): perf bias configuration for processors $failedProcessorIds has failed"
+      echo "ERROR (corgi-power-management-cpu.shlib): $response"
+      logger "ERROR (corgi-power-management-cpu.shlib): $response"
   
     fi
     
@@ -850,64 +954,6 @@ setPerfBiasOnCpus() {
     
   }
   
-  exit $?
-  
-}
-
-
-cpuHasBoostSupport() {
-  
-  processorId="$1"
-  
-  boostStateSupportStatus="`cpupower --cpu "$processorId" frequency-info | grep 'Supported'`"
-  boostStateSupportStatus="`corgiFetchSubstringAfter "$boostStateSupportStatus" ':' 'first'`"
-  boostStateSupportStatus="`corgiTrimWhiteSpace "$boostStateSupportStatus"`"
-
-  if [ "$boostStateSupportStatus" = 'yes' ]
-  then
-    return 0
-  fi
-  
-  return 1
-  
-}
-
-getCpuBoostState() {
-  
-  state='unsupported'
-  
-  processorId="$1"
-  beSpecific=$2
-  
-  if [ -z "$beSpecific" ] || [ $beSpecific != false ]
-  then
-    beSpecific=true
-  fi
-
-  if cpuHasBoostSupport "$processorId"
-  then  
-      
-    if [ $beSpecific = true ]
-    then
-      
-      boostState="`cpupower --cpu "$processorId" frequency-info | grep 'Active'`"
-      boostState="`corgiFetchSubstringAfter "$boostState" ':' 'first'`"
-      boostState="`corgiTrimWhiteSpace "$boostState"`"
-            
-      if [ "$boostState" = 'yes' ]
-      then
-        state='enabled'  
-      else
-        state='disabled'  
-      fi
-      
-    else
-      state='supported'    
-    fi
-    
-  fi
-  
-  echo "$state"
   exit $?
   
 }
