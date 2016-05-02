@@ -1,0 +1,1021 @@
+#!/bin/sh
+
+# Copyright 2015 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
+#
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
+
+# corgi-openbox-menus-network.shlib - Functions used to generate Openbox menus and items for describing and managing network devices and connections, 
+# using NetworkManager as a backend.
+#
+# v2015.07.17
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-openbox-menus-core.shlib
+# Requires: corgi-network-management.shlib
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib or corgi-network-management.shlib)
+# Requires: NetworkManager
+# Requires: nm-connection-editor - if we plan on manually adding or editing network connections (this may be provided by the network-manager-applet package)
+# Requires: zenity - if we plan on connecting to authenticated and/or hidden wireless networks - used for entering SSIDs and passwords
+
+
+exitStatus=1
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+
+corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
+corgiNetworkManagementLib="$parentDirectory/lib/corgi/corgi-network-management.shlib"
+
+if [ ! -e "$corgiObMenuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-network.shlib): $corgiObMenuLib is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-network.shlib): $corgiObMenuLib is missing. Exiting..."
+  exit $exitStatus
+fi
+
+if [ ! -e "$corgiNetworkManagementLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-network.shlib): $corgiNetworkManagementLib is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-network.shlib): $corgiNetworkManagementLib is missing. Exiting..."
+  exit $exitStatus
+fi
+
+. "$corgiObMenuLib"
+. "$corgiNetworkManagementLib"
+
+hasNetworkManager=false
+hasNmConnectionEditor=false
+hasZenity=false
+
+if ! command -v nmcli > /dev/null
+then
+  logger "ERROR (corgi-openbox-menus-network.shlib): nmcli not found. Please install NetworkManager"
+else
+  hasNetworkManager=true
+fi
+
+if ! command -v nm-connection-editor > /dev/null
+then
+  logger "WARN (corgi-openbox-menus-network.shlib): nm-connection-editor not found. We can't manually add or edit connections without it. Please install nm-connection-editor or nm-applet."
+else
+  hasNmConnectionEditor=true
+fi
+
+if ! command -v zenity > /dev/null
+then
+  logger "WARN (corgi-openbox-menus-network.shlib): zenity not found. We can't connect to secured wireless networks without it. Please install zenity."
+else
+  hasZenity=true
+fi
+
+
+# Generates and echos a menu containing the name (SSID) and signal strength of a wireless network (as either font-based bars, or by icon representation),
+# as well as a child menu which contains more detailed information about that network,
+# as well as a child item which provides the option to connect to that network.
+#
+# Note: this function expects 8 arguments, but only as the minimum.
+# Example: in the case that a network name (SSID) contains spaces, each portion will be a separate
+# arg by the time it is passed to this function, which will then combine them.
+# Supported security standards, if multiple are supported by the network, will also be space-delimited,
+# therefore treated as separate args, therefore increasing the arg count, and will likewise be combined by this function.
+#
+# In the most simple case, that the name contains no spaces, and only one security standard is supported:
+# $1 - string, required, the name (SSID) of the wireless network
+# $2 - string, reuired, the mode
+# $3 - number, required, the channel
+# $4 - number, required, the speed
+# $5 - string, required, the rate by which speed is measured (normally as "Mbit/s")
+# $6 - string, required, the signal strength, represented as a number (assumed out of 100 (full-strength))
+# $7 - number, required, the signal strength, represented by font-based bars ("▂___', "▂▄__", "▂▄▆_", "▂▄▆█")
+# $8 - string, required, the supported seurity standard ("WEP", "WPA1", "WPA2", etc)
+buildWifiNetworkMenu() {
+
+  expectedArgCount=8
+  isConnected=false
+  isHidden=false
+
+  ssid="$1"
+
+  if [ "$ssid" = '(CONNECTED)' ]
+  then
+    isConnected=true
+    ssid="$2"
+    shift
+  fi
+
+  if [ "$ssid" = '--' ]
+  then
+    isHidden=true
+    ssid="(HIDDEN)"
+  fi
+
+  argCount=$#
+  security="`corgiFetchNthArg -1 "$@"`"
+  secondToLast="`corgiFetchNthArg -2 "$@"`"
+
+  if [ $argCount -gt $expectedArgCount ]
+  then
+
+    case "$secondToLast" in
+
+      "WPA"*)
+        security="$secondToLast/$security"
+        bars="`corgiFetchNthArg -3 "$@"`"
+        signalStrength=`corgiFetchNthArg -4 "$@"`
+        speed="`corgiFetchNthArg -6 "$@"` `corgiFetchNthArg -5 "$@"`"
+        channel="`corgiFetchNthArg -7 "$@"`"
+        mode="`corgiFetchNthArg -8 "$@"`"
+        argCount=$(($argCount - 1))
+      ;;
+
+      *)
+        bars="$secondToLast"
+        signalStrength=`corgiFetchNthArg -3 "$@"`
+        speed="`corgiFetchNthArg -5 "$@"` `corgiFetchNthArg -4 "$@"`"
+        channel="`corgiFetchNthArg -6 "$@"`"
+        mode="`corgiFetchNthArg -7 "$@"`"
+      ;;
+
+    esac
+
+    if [ $argCount -gt $expectedArgCount ]
+    then
+
+      lastSsidIdx=$(($argCount - $expectedArgCount))
+
+      for idx in `seq 1 $lastSsidIdx`
+      do
+        ssid="$ssid "`corgiFetchNthArg $idx "$@"`""
+      done
+
+    fi
+
+  else
+    mode="$2"
+    channel="$3"
+    speed="$4 $5"
+    signalStrength=$6
+    bars="$7"
+    security="$8"
+  fi
+
+  wifiNetworkMenuLabel="`corgiObEscapeUnderscores "$ssid"`"
+  wifiNetworkMenuLabel="`corgiReplaceAllOccurrencesOfSubstring "$wifiNetworkMenuLabel" '&' '&amp;'`"
+
+  mode="Mode: $mode"
+  channel="Channel: $channel"
+  speed="Speed: $speed"
+  security="Security: $security"
+
+  wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-signal-strength-0.png"
+
+  if [ $isConnected = false ]
+  then
+
+    if [ $signalStrength -eq 100 ]
+    then
+      wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-signal-strength-100.png"
+    elif [ $signalStrength -ge 80 ]
+    then
+      wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-signal-strength-80.png"
+    elif [ $signalStrength -ge 60 ]
+    then
+      wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-signal-strength-60.png"
+    elif [ $signalStrength -ge 40 ]
+    then
+      wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-signal-strength-40.png"
+    elif [ $signalStrength -ge 20 ]
+    then
+      wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-signal-strength-20.png"
+    fi
+
+  else
+    wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-status-connected.png"
+  fi
+
+  wifiNetworkDetailItems="`corgiObMenuItem "label:$mode"`"
+  wifiNetworkDetailItems="$wifiNetworkDetailItems`corgiObMenuItem "label:$channel"`"
+  wifiNetworkDetailItems="$wifiNetworkDetailItems`corgiObMenuItem "label:$speed"`"
+  wifiNetworkDetailItems="$wifiNetworkDetailItems`corgiObMenuItem "label:$security"`"
+  wifiNetworkDetailItems="$wifiNetworkDetailItems`corgiObMenuItem "label:Signal Strength: $signalStrength%"`"
+
+  menuId="`corgiMakeIdString "corgi-menu-networkmanager-wifi-network-details-"`"
+  wifiNetworkDetailsMenu="`corgiObMenu "id:$menuId" "label:Details" "content:$wifiNetworkDetailItems"`"
+
+  wifiNetworkMenuContent="$wifiNetworkDetailsMenu"
+
+  if [ $isConnected = false ]
+  then
+
+    if [ $hasZenity = true ]
+    then
+
+      if [ $isHidden = false ]
+      then
+        connectCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib\" ; connectToWifiNetwork \"$ssid\"'"
+      else
+        connectCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib\" ; connectToWifiNetwork  \"\" \"\"  true'"
+      fi
+
+      wifiNetworkConnectItem="`corgiObMenuItem "label:Connect" "action:Execute" "command:$connectCommand"`"
+      wifiNetworkMenuContent="$wifiNetworkMenuContent$wifiNetworkConnectItem"
+
+    fi
+
+  fi
+
+  menuId="`corgiMakeIdString "corgi-menu-networkmanager-wifi-network-"`"
+
+  if [ ! -e "$wifiNetworkMenuIcon" ]
+  then
+
+    wifiNetworkMenuLabel="$signalStrength%  $wifiNetworkMenuLabel"
+
+    if [ $isConnected = true ]
+    then
+      wifiNetworkMenuLabel="(CONNECTED) $wifiNetworkMenuLabel"
+    fi
+
+    wifiNetworkMenu=`corgiObMenu "id:$menuId" "label:$wifiNetworkMenuLabel" "content:$wifiNetworkMenuContent"`
+
+  else
+    wifiNetworkMenu=`corgiObMenu "id:$menuId" "icon:$wifiNetworkMenuIcon" "label:$wifiNetworkMenuLabel" "content:$wifiNetworkMenuContent"`
+  fi
+
+  echo "$wifiNetworkMenu"
+  exit 0
+
+}
+
+
+# Generates and echos a string of menus containing data which describes available wireless networks.
+#
+# $1 - string, optional, determines whether visible or hidden networks should be included 
+#      options are 'hidden' and 'visible' - defaults to 'visible'
+buildWifiNetworkMenus() {
+
+  requestVisibility="$1"
+
+  if [ -z "$requestVisibility" -o "$requestVisibility" != 'hidden' ]
+  then
+    requestVisibility='visible'
+  fi
+
+  nmcli device wifi list | {
+
+    wifiNetworkMenus=''
+    count=0
+
+    while read -r line
+    do
+
+      # The first line of output is generally column names, so skip that...
+      if [ $count -gt 0 ]
+      then
+
+        args="$line"
+        visibility='visible'
+
+        if corgiStartsWithSubstring "$line" '*'
+        then
+          args="${line#** }"
+          args="(CONNECTED) $args"
+          visibility="`getWifiNetworkVisibility true $args`"
+        else
+          visibility="`getWifiNetworkVisibility false $args`"
+        fi
+
+        if [ "$visibility" = "$requestVisibility" ]
+        then
+          wifiNetworkMenus="$wifiNetworkMenus`buildWifiNetworkMenu $args`"
+        fi
+
+      fi
+
+      count=$(($count + 1))
+
+    done
+
+    echo "$wifiNetworkMenus"
+    exit 0
+    
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echos a menu containing a collection of menus which contain data describing available wireless networks.
+#
+# $1 - string, optional, determines whether visible or hidden networks should be included (i.e., "hidden" or "visible" - defaults to "visible")
+buildWifiNetworksMenu() {
+
+  exitStatus=0
+  visibility="$1"
+
+  if [ -z "$visibility" -o "$visibility" != 'hidden' ]
+  then
+    visibility='visible'
+  fi
+
+  wifiNetworkMenus=''
+
+  # SOMETIMES, after disabling and re-enabling the wireless,
+  # Openbox renders the menu before nmcli can get the available network info (this was tested on extremely fast hardware).
+  # THUS, if, at first, there's no data with which to build the menus, we'll try it again...
+
+  attemptLimit=10
+  attemptPauseTime=".1s"
+
+  for idx in `seq 0 $attemptLimit`
+  do
+
+    wifiNetworkMenus="`buildWifiNetworkMenus "$visibility"`"
+
+    if [ ! -z "$wifiNetworkMenus" ]
+    then
+      break
+    fi
+
+    sleep "$attemptPauseTime"
+
+  done
+
+  if [ -z "$wifiNetworkMenus" ]
+  then
+  
+  	if [ $? -eq 0 ]
+  	then
+ 
+ 			if [ "$visibility" = 'hidden' ]
+  		then
+  			wifiNetworkMenus="`corgiObMenuItem "label:No hidden networks available."`"
+ 			else
+ 				wifiNetworkMenus="`corgiObMenuItem "label:No networks available."`"
+ 			fi
+ 
+  	else
+    	wifiNetworkMenus="`corgiObMenuItem "label:Unable to build wifi network menus."`"
+    	exitStatus=1
+    fi
+    
+  fi
+
+  wifiNetworksPipeMenu="`corgiObPipeMenu "content:$wifiNetworkMenus"`"
+
+  echo "$wifiNetworksPipeMenu"
+  exit $exitStatus
+
+}
+
+
+# Parses a single line of output from command '# nmcli device show' (provided by the caller).
+# From that, it generates and echos a single item which describes a networking device.
+#
+# Note: this function expects 2 arguments, but only as the minimum.
+# Example: in the case that a field value contains spaces, each portion will be a separate
+# arg by the time it is passed to this function, which will then combine them.
+#
+# $1 - string, required, the field name which identifies the device property
+# $2 - string, required (may be empty), the value which describes the device property
+buildDeviceProfileMenuItem() {
+
+  deviceMenuItem=''
+  fieldId="$1"
+  
+  fieldId="`corgiFetchSubstringBefore "$fieldId" ':' 'first'`"
+	fieldId="`corgiTrimWhiteSpace "$fieldId"`"
+
+  shift
+
+  label=''
+  value='--'
+
+  case "$fieldId" in
+    'WIRED-PROPERTIES.CARRIER') label='Carrier Status' ;;
+    'IP4.ADDRESS[1]') label='IPv4 Address' ;;
+    'IP4.GATEWAY') label='IPv4 Gateway' ;;
+    'IP4.DNS[1]') label='IPv4 DNS' ;;
+    'IP4.DOMAIN[1]') label='IPv4 Domain' ;;
+    'IP6.ADDRESS[1]') label='IPv6 Address' ;;
+    'IP6.GATEWAY') label='IPv6 Gateway' ;;
+  esac
+
+  # We want to produce items only for those fields listed in the above case...
+  if [ ! -z "$label" ]
+  then
+
+    if [ $# -gt 1 ]
+    then
+
+      value=''
+
+      for arg in "$@"
+      do
+        value="$value $arg"
+      done
+
+    elif [ $# -gt 0 ]
+    then
+      value="$1"
+    fi
+
+    deviceMenuItem="`corgiObMenuItem "label:$label: $value"`"
+
+  fi
+
+  echo "$deviceMenuItem"
+  exit 0
+
+}
+
+
+# Parses a single line of output from command '# nmcli -p -f general device show' (provided by the caller).
+# From that, it generates and echos a single item which describes a networking device.
+#
+# Note: this function expects 2 arguments, but only as the minimum.
+# Example: in the case that a field value contains spaces, each portion will be a separate
+# arg by the time it is passed to this function, which will then combine them.
+#
+# $1 - string, required, the field name which identifies the device property
+# $2 - string, required (may be empty), the value which describes the device property
+buildDeviceProfileMenuItemGeneral() {
+
+  deviceMenuItem=''
+  fieldId="$1"
+  
+  fieldId="`corgiFetchSubstringBefore "$fieldId" ':' 'first'`"
+	fieldId="`corgiTrimWhiteSpace "$fieldId"`"
+
+  shift
+
+  label=''
+  value='--'
+
+  case "$fieldId" in
+    'GENERAL.VENDOR') label='Vendor' ;;
+    'GENERAL.PRODUCT') label='Product Name' ;;
+    'GENERAL.DRIVER') label='Driver' ;;
+    'GENERAL.DRIVER-VERSION') label='Driver Version' ;;
+    'GENERAL.HWADDR') label='MAC Address' ;;
+    'GENERAL.MTU') label='MTU' ;;
+    'GENERAL.STATE') label='State' ;;
+    'GENERAL.CONNECTION') label='Connection Name' ;;
+#    'GENERRAL.UDI') label='Device ID' ;;
+    'GENERAL.CON-UUID') label='Connection UUID' ;;
+    'GENERAL.CON-PATH') label='Connection Path' ;;
+    'GENERAL.IS-SOFTWARE') label='Is Software' ;;
+    'GENERAL.NM-MANAGED') label='Managed by NetworkManager' ;;
+    'GENERAL.AUTOCONNECT') label='Autoconnect' ;;
+  esac
+
+  # We want to produce items only for those fields listed in the above case...
+  if [ ! -z "$label" ]
+  then
+
+    if [ $# -gt 1  ]
+    then
+
+      value=''
+
+      for arg in "$@"
+      do
+        value="$value $arg"
+      done
+
+    elif [ $# -gt 0 ]
+    then
+      value="$1"
+    fi
+
+    deviceMenuItem="`corgiObMenuItem "label:$label: $value"`"
+
+    if [ "$fieldId" = 'GENERAL.STATE' ]
+    then
+
+      status='enabled'
+
+      case "$value" in
+        '100'*|' 100'*) status='enabled' ;;
+        '10'*|' 10'*) status='unmanaged' ;;
+        '20'*|' 20'*) status='disabled' ;;
+      esac
+
+      deviceMenuItem="`corgiObMenuItem "label:Status: $status"`$deviceMenuItem"
+
+    fi
+
+  fi
+
+  echo "$deviceMenuItem"
+  exit 0
+
+}
+
+
+# Generates and echos a string containing items which describe a networking device.
+# The items are generated from the "general" device data provided by NetworkManager, via command '# nmcli -p -f general device show'.
+#
+# $1 - string, required, the name of the device for which we're gathering data and generating output
+buildDeviceProfileMenuItemsGeneral() {
+
+  deviceMenuItems=''
+  identifier="$1"
+
+  nmcli -p -f general device show "$identifier" | {
+
+    while read -r line
+    do
+      deviceMenuItems="$deviceMenuItems`buildDeviceProfileMenuItemGeneral $line`"
+    done
+
+    echo "$deviceMenuItems"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echos a menu containing items which describe the networking device assodciated with the provided identifier.
+#
+# $1 - string, required, the identifier for the device for which we're gathering data and generating output
+buildDeviceProfileMenuByIdentifier() {
+
+  exitStatus=0
+  identifier="$1"
+
+  nmcli device show "$identifier" | {
+
+    deviceMenuItems=''
+    deviceMenuItems="$deviceMenuItems`buildDeviceProfileMenuItemsGeneral "$identifier"`"
+
+    while read -r line
+    do
+      deviceMenuItems="$deviceMenuItems`buildDeviceProfileMenuItem $line`"
+    done
+
+    if [ -z "$deviceMenuItems" ]
+    then
+      deviceMenuItems="`corgiObMenuItem "label:Unable to build device profile items."`"
+      exitStatus=1
+    fi
+
+    devicesPipeMenu="`corgiObPipeMenu "content:$deviceMenuItems"`"
+
+    echo "$devicesPipeMenu"
+    exit $exitStatus
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echos a string of menus containing data which describes the system's netowrking devices.
+# A child menu is generated for each type of device present (i.e., "ethernet", "wifi". "loopback").
+# For each device detected, an additional child menu is added to its respective type menu.
+buildDeviceProfilesMenu() {
+
+  exitStatus=0
+
+  nmcli device show | {
+
+    deviceMenus=''
+    deviceMenusEthernet=''
+    deviceMenusLoopback=''
+    deviceMenusWifi=''
+    currentDeviceName=''
+    currentDeviceType=''
+
+    menuIcon="$parentDirectory/share/icons/corgi/openbox/menus/chardevice.png"
+
+    while read -r line
+    do
+
+      # Typically, there's an empty line between devices in the response...
+      if [ ! -z "$line" ] 
+      then
+
+        if corgiStartsWithSubstring "$line" 'GENERAL.DEVICE'
+        then
+          currentDeviceName="`corgiGetValueFromSpaceDelimitedNameValuePair $line`"
+        elif corgiStartsWithSubstring "$line" 'GENERAL.TYPE'
+        then
+
+          currentDeviceType="`corgiGetValueFromSpaceDelimitedNameValuePair $line`"
+          
+          case "$currentDeviceType" in
+
+            'ethernet')
+
+              menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-ethernet-$currentDeviceName-"`"
+              deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
+              deviceMenusEthernet="$deviceMenusEthernet`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"              
+
+            ;;
+
+            'loopback')
+
+              menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-loopback-$currentDeviceName-"`"
+              deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
+              deviceMenusLoopback="$deviceMenusLoopback`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
+
+            ;;
+
+            'wifi')
+
+              menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-wifi-$currentDeviceName-"`"
+              deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
+              deviceMenusWifi="$deviceMenusWifi`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
+
+            ;;
+
+#            *)
+#
+#              menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-$currentDeviceType-$currentDeviceName-"`"
+#              deviceProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib&quot; ; buildDeviceProfileMenuByIdentifier &quot;$currentDeviceName&quot;'"
+#              deviceMenusWifi="$deviceMenusWifi`corgiObMenu "id:$menuId" "icon:$menuIcon" "label:$currentDeviceName" "execute:$deviceProfileMenuCommand"`"
+#
+#            ;;
+
+          esac
+
+        fi
+
+      fi
+
+    done
+
+    if [ ! -z "$deviceMenusEthernet" ]
+    then
+      menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-ethernet-"`"
+      deviceMenus="`corgiObMenu "id:$menuId" "label:Ethernet" "content:$deviceMenusEthernet"`"
+    fi
+
+    if [ ! -z "$deviceMenusLoopback" ]
+    then
+      menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-loopback-"`"
+      deviceMenus="$deviceMenus`corgiObMenu "id:$menuId" "label:Loopback" "content:$deviceMenusLoopback"`"
+    fi
+
+    if [ ! -z "$deviceMenusWifi" ]
+    then
+      menuId="`corgiMakeIdString "corgi-menu-networkmanager-devices-wifi-"`"
+      deviceMenus="$deviceMenus`corgiObMenu "id:$menuId" "label:Wireless" "content:$deviceMenusWifi"`"
+    fi
+
+    if [ -z "$deviceMenus" ]
+    then
+      deviceMenus="`corgiObMenuItem "label:Unable to build device profile menus."`"
+      exitStatus=1
+    fi
+
+    devicesPipeMenu="`corgiObPipeMenu "content:$deviceMenus"`"
+
+    echo "$devicesPipeMenu"
+    exit $exitStatus
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echos a pipe menu containing items which describe a NetworkManager connection.
+#
+# Note: this function expects 4 arguments, but only as the minimum.
+# Example: in the case that a profile name contains spaces, each portion will be a separate
+# arg by the time it is passed to this function, which will then combine them.
+#
+# $1 - string, required, the name which identifies the connection
+# $2 - string, required, the network type with which this connection is associated
+# $3 - string, required, the UUID which identifies the connection
+# $4 - string, required, the networking device with which this connection is used
+buildConnectionProfileDetailsMenu() {
+
+  detailsMenuItems=''
+
+  expectedArgCount=4
+
+  argCount=$#
+  name="$1"
+  menuIdName="$name"
+  device="`corgiFetchNthArg -1 "$@"`"
+  type="`corgiFetchNthArg -2 "$@"`"
+  uuid="`corgiFetchNthArg -3 "$@"`"
+  status="enabled"
+
+  if [ $argCount -gt $expectedArgCount ]
+  then
+
+    lastNameIdx=$(($argCount - $expectedArgCount))
+
+    for idx in `seq 1 $lastNameIdx`
+    do
+      name="$name `corgiFetchNthArg $idx "$@"`"
+    done
+
+  fi
+
+  if [ "$device" = '--' ]
+  then
+    status="disabled"
+  fi
+
+  detailsMenuItems="`corgiObMenuItem "label:UUID: $uuid"`"
+  detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:Status: $status"`"
+  detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:Type: $type"`"
+  detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:Device: $device"`"
+
+  getConnectionFieldValuesByConnectionIdentifierAndFieldNames 'uuid' "$uuid" '802-11-wireless.ssid' 'IP4.ADDRESS[1]' 'IP4.GATEWAY' 'IP4.DOMAIN[1]' 'IP6.ADDRESS[1]' 'IP6.GATEWAY' | {
+
+    ip4Address='--'
+    ip4Gateway='--'
+    ip4Domain='--'
+    ip6Address='--'
+    ip6Gateway='--'
+
+    count=0
+
+    if corgiEndsWithSubstring "$type" 'wireless'
+    then
+
+      wifiSsid='--'
+
+      while read -r value
+      do
+
+        case $count in
+          0) wifiSsid="$value" ;;
+          1) ip4Address="$value" ;;
+          2) ip4Gateway="$value" ;;
+          3) ip4Domain="$value" ;;
+          4) ip6Address="$value" ;;
+          5) ip6Gateway="$value" ;;
+        esac
+
+        count=$(($count + 1))
+
+      done
+
+			wifiSsid="`corgiObEscapeUnderscores "$wifiSsid"`"
+      detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:Network SSID: $wifiSsid"`"
+
+    else
+
+      while read -r value
+      do
+
+        case $count in
+          0) ip4Address="$value" ;;
+          1) ip4Gateway="$value" ;;
+          2) ip4Domain="$value" ;;
+          3) ip6Address="$value" ;;
+          4) ip6Gateway="$value" ;;
+        esac
+
+        count=$(($count + 1))
+
+      done
+
+    fi
+
+    detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:IPv4 Address: $ip4Address"`"
+    detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:IPv4 Gateway: $ip4Gateway"`"
+    detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:IPv4 Domain: $ip4Domain"`"
+    detailsMenuItems="$detailsMenuItems`corgiObMenuItem "label:IPv6 Address: $ip6Address"`"
+
+    if [ -z "$detailsMenuItems" ]
+    then
+      detailsMenuItems="`corgiObMenuItem "label:Unable to build connection profile details."`"
+    fi
+
+    detailsPipeMenu="`corgiObPipeMenu "content:$detailsMenuItems"`"
+
+    echo "$detailsPipeMenu"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+# Parses a single line of output from command '# nmcli connection show' (provided by the caller).
+# From that, it generates and echos a menu containing items which describe a NetworkManager connection.
+#
+# Note: this function expects 4 arguments, but only as the minimum.
+# Example: in the case that a profile name contains spaces, each portion will be a separate
+# arg by the time it is passed to this function, which will then combine them.
+#
+# $1 - string, required, the name which identifies the connection
+# $2 - string, required, the network type with which this connection is associated
+# $3 - string, required, the UUID which identifies the connection
+# $4 - string, required, the networking device with which this connection is used
+buildConnectionProfileMenuContent() {
+
+  connectionProfileMenuContent=''
+  expectedArgCount=4
+
+  argCount=$#
+  name="$1"
+  menuIdName="$name"
+  device="`corgiFetchNthArg -1 "$@"`"
+  type="`corgiFetchNthArg -2 "$@"`"
+  uuid="`corgiFetchNthArg -3 "$@"`"
+
+  if [ $argCount -gt $expectedArgCount ]
+  then
+
+    lastNameIdx=$(($argCount - $expectedArgCount))
+
+    for idx in `seq 1 $lastNameIdx`
+    do
+      nameAppendage="`corgiFetchNthArg $idx "$@"`"
+      name="$name $nameAppendage"
+      menuIdName="$menuIdName-$nameAppendage"
+    done
+
+  fi
+
+  toggleStateMenuItemLabel="Disable"
+  toggleStateSetState="down"
+
+  if [ "$device" = '--' ]
+  then
+    toggleStateMenuItemLabel="Enable"
+    toggleStateSetState="up"
+  fi
+
+  menuId="`corgiMakeIdString "corgi-menu-networkmanager-connection-$menuIdName-details-"`"
+  detailsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib&quot; ; buildConnectionProfileDetailsMenu "$@"'"
+  detailsMenu="`corgiObMenu "id:$menuId" "label:Details" "execute:$detailsMenuCommand"`"
+  connectionProfileMenuContent="$detailsMenu"
+  
+  toggleStateMenuItemCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib\" ; toggleConnectionState 'uuid' \"$uuid\" \"$type\" \"$toggleStateSetState\"'"
+  toggleStateMenuItem="`corgiObMenuItem "label:$toggleStateMenuItemLabel" "action:Execute" "command:$toggleStateMenuItemCommand"`"
+  connectionProfileMenuContent="$connectionProfileMenuContent$toggleStateMenuItem"
+
+  if [ $hasNmConnectionEditor = true ]
+  then
+    editConnectionMenuItem="`corgiObMenuItem "label:Edit" "action:Execute" "command:nm-connection-editor --edit=$uuid"`"
+    connectionProfileMenuContent="$connectionProfileMenuContent$editConnectionMenuItem"
+  fi
+
+  deleteConnectionMenuItemCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib\" ; deleteConnection \"$name\" \"$uuid\"'"
+  deleteConnectionMenuItem="`corgiObMenuItem "label:Delete" "action:Execute" "command:$deleteConnectionMenuItemCommand"`"
+  connectionProfileMenuContent="$connectionProfileMenuContent$deleteConnectionMenuItem"
+
+  connectionProfileMenuContent="`corgiObPipeMenu "content:$connectionProfileMenuContent"`"
+
+  echo "$connectionProfileMenuContent"
+  exit $?
+
+}
+
+
+# Generates and echos menus used to control and describe the NetworkManager connections assodciated with the provided type.
+#
+# $1 - string, required, the type associated with the NetworkManager connections for which we're gathering data and generating output
+buildConnectionProfileMenusForConnectionType() {
+
+  connectionType="$1"
+
+  nmcli connection show | {
+
+    connectionProfileMenus=''
+    count=0
+
+    while read -r line
+    do
+
+      # The first line of output is generally column names, so skip that...
+      if [ $count -gt 0 ]
+      then
+
+        connectionTypeForComparison="`corgiFetchNthArg -2 $line`"
+
+        if [ "$connectionTypeForComparison" = "$connectionType" ]
+        then
+
+          connectionProfileName="`parseConnectionShowLineForName $line`"
+          connectionProfileName="`corgiObEscapeUnderscores "$connectionProfileName"`"
+          connectionProfileName="`corgiReplaceAllOccurrencesOfSubstring "$connectionProfileName" '&' '&amp;'`"
+          connectionProfileUuid="`corgiFetchNthArg -3 $line`"
+
+          menuId="`corgiMakeIdString "corgi-menu-networkmanager-connections-$connectionType-$connectionProfileUuid-"`"
+          connectionProfileMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-network.shlib&quot; ; buildConnectionProfileMenuContent $line'"
+          connectionProfileMenu="`corgiObMenu "id:$menuId" "label:$connectionProfileName" "execute:$connectionProfileMenuCommand"`"
+          connectionProfileMenus="$connectionProfileMenus$connectionProfileMenu"
+
+        fi
+
+      fi
+
+      count=$(($count + 1))
+
+    done
+
+    echo "$connectionProfileMenus"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+# Generates and echos a pipe menu containing menus which contain data which describes NetworkManager connections, 
+# as well as the option to enable, disable, edit or delete those connections.
+# A child menu is generated for each type of connection present (i.e., "ethernet" and "wifi").
+# For each connection found, an additional child menu is added to its respective type menu.
+#
+# $1 - true or false, optional, defines whether or not wireless connections should be included in the output (defaults to true)
+buildConnectionProfilesMenu() {
+
+  exitStatus=0
+  includeWifiConnections=true
+
+  if [ ! -z "$1" ] && ! $1
+  then
+    includeWifiConnections=false
+  fi
+
+  getAllConnectionTypesInUse | {
+
+    connectionMenus=''
+
+    while read -r type
+    do
+
+      case "$type" in
+
+        *'ethernet')
+          menuLabel='Ethernet'
+          menuId="`corgiMakeIdString "corgi-menu-networkmanager-connections-ethernet-"`"
+          profileMenusForType="`buildConnectionProfileMenusForConnectionType "$type"`"
+          connectionMenus="$connectionMenus`corgiObMenu "id:$menuId" "label:$menuLabel" "content:$profileMenusForType"`"
+        ;;
+      
+        *'wireless')
+
+          if [ $includeWifiConnections = true ]
+          then
+            menuId="`corgiMakeIdString "corgi-menu-networkmanager-connections-wireless-"`"
+            menuLabel="Wireless"
+            profileMenusForType="`buildConnectionProfileMenusForConnectionType "$type"`"
+            connectionMenus="$connectionMenus`corgiObMenu "id:$menuId" "label:$menuLabel" "content:$profileMenusForType"`"
+          fi
+
+        ;;
+
+       *)
+         menuId="`corgiMakeIdString "corgi-menu-networkmanager-connections-type-"`"
+         menuLabel="$type"
+         profileMenusForType="`buildConnectionProfileMenusForConnectionType "$type"`"
+         connectionMenus="$connectionMenus`corgiObMenu "id:$menuId" "label:$menuLabel" "content:$profileMenusForType"`"
+       ;;
+
+      esac
+
+    done
+
+    if [ $hasNmConnectionEditor = true ]
+    then
+      openEditorItem="`corgiObMenuItem "label:Open Connection Editor" "action:Execute" "command:nm-connection-editor --show"`"
+      connectionMenus="$connectionMenus$openEditorItem"
+    fi
+
+    if [ -z "$connectionMenus" ]
+    then
+      connectionMenus="`corgiObMenuItem "label:Unable to build connection profile menus"`"
+      exitStatus=1
+    fi
+
+    connectionsPipeMenu="`corgiObPipeMenu "content:$connectionMenus"`"
+
+    echo "$connectionsPipeMenu"
+    exit $exitStatus
+
+  }
+
+  exit $?
+
+}

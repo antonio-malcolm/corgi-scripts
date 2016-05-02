@@ -12,7 +12,7 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-power-management-cpu.shlib - Functions used to generate Openbox menus and items for describing and managing power management and
+# corgi-openbox-menus-power-management-cpu.shlib - Functions used to generate Openbox menus and items which describe and manage power management and
 #                                                  throttling options for CPUs, using /proc/cpuinfo and cpupower as backends.
 #
 # v2015.07.17
@@ -24,7 +24,6 @@
 # Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib or corgi-power-management-cpu.shlib)
 # Requires: cpupower - for obtaining information describing CPU performance and power saving characteristics,
 #                      as well as setting performance and power saving options
-# Optional: libnotify - used for informational and success notifications
 
 
 currentDirectory="`dirname "$0"`"
@@ -36,15 +35,15 @@ corgiPowerManagementCpuLib="$parentDirectory/lib/corgi/corgi-power-management-cp
 
 if [ ! -e "$corgiObMenuLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Openbox Menu library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Openbox Menu library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Openbox Menu library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Openbox Menu library is missing. Exiting..."
   exit 1
 fi
 
 if [ ! -e "$corgiPowerManagementCpuLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Power Management CPU library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Power Management CPU library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Power Management CPU library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-power-management-cpu.shlib): The Corgi Power Management CPU library is missing. Exiting..."
   exit 1
 fi
 
@@ -52,20 +51,12 @@ fi
 . "$corgiPowerManagementCpuLib"
 
 hasCpuPower=false
-hasNotify=false
 
 if ! command -v cpupower > /dev/null
 then
   logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): cpupower not found. Please install cpupower"
 else 
   hasCpuPower=true
-fi
-
-if ! command -v notify-send > /dev/null
-then
-  logger "INFO (corgi-openbox-menus-power-management-cpu.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
-else
-  hasNotify=true  
 fi
 
 

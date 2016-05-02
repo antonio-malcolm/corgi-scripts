@@ -21,8 +21,6 @@
 # Requires: corgi-openbox-menus-samba.shlib
 # Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
 # Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-samba.shlib)
-# Requires: samba
-# Requires: smbclient
 
 exitStatus=1
 currentDirectory="`dirname "$0"`"
@@ -32,8 +30,8 @@ corgiObMenusSambaLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-men
 
 if [ ! -e "$corgiObMenusSambaLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-samba): The Corgi Openbox Samba Menu library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menus-samba): The Corgi Openbox Samba Menu library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-samba): The Corgi Openbox Samba Menu library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-samba): The Corgi Openbox Samba Menu library is missing. Exiting..."
   exit $exitStatus
 fi
 
@@ -41,34 +39,22 @@ fi
 
 pipeMenu=''
 
-if ! command -v smbclient > /dev/null
-then
-  logger "ERROR (corgi-openbox-menus-samba): smbclient command not found. Please install smbclient or the Samba package"
-  pipeMenu=`corgiObMenuItem "label:smbclient command requires smbclient package..."`
-elif ! command -v nmblookup > /dev/null
-then
-  logger "ERROR (corgi-openbox-menus-samba): nmblookup command not found. Please install smbclient or the Samba package"
-  pipeMenu=`corgiObMenuItem "label:nmblookup command requires smbclient package..."`
-else
+menuId="`corgiMakeIdString "corgi-menus-samba-hosts-"`"
+hostMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib&quot; ; buildSambaHostMenus'"
+hostsMenu="`corgiObMenu "id:$menuId" "label:Hosts" "execute:$hostMenuCommand"`" 
 
-  menuId="`corgiMakeIdString "corgi-menus-samba-hosts-"`"
-  hostMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib&quot; ; buildSambaHostMenus'"
-  hostsMenu="`corgiObMenu "id:$menuId" "label:Hosts" "execute:$hostMenuCommand"`" 
+pipeMenu="$pipeMenu$hostsMenu"
 
-  pipeMenu="$pipeMenu$hostsMenu"
-
-  mountsMenu="`buildCurrentSambaMountsMenu`"
-  pipeMenu="$pipeMenu$mountsMenu"
+mountsMenu="`buildCurrentSambaMountsMenu`"
+pipeMenu="$pipeMenu$mountsMenu"
  
-  mountByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare false'"
-  mountByAddressItems="`corgiObMenuItem "label:Mount By Address" "action:Execute" "command:$mountByAddressCommand"`"
+mountByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare false'"
+mountByAddressItems="`corgiObMenuItem "label:Mount By Address" "action:Execute" "command:$mountByAddressCommand"`"
 
-  mountRoByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare true'"
-  mountByAddressItems="$mountByAddressItems`corgiObMenuItem "label:Mount Read-Only By Address" "action:Execute" "command:$mountRoByAddressCommand"`"
+mountRoByAddressCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-samba.shlib\" ; promptUserForSambaShareAddress mountSambaShare true'"
+mountByAddressItems="$mountByAddressItems`corgiObMenuItem "label:Mount Read-Only By Address" "action:Execute" "command:$mountRoByAddressCommand"`"
   
-  pipeMenu="$pipeMenu$mountByAddressItems"
-
-fi
+pipeMenu="$pipeMenu$mountByAddressItems"
 
 pipeMenu="`corgiObPipeMenu "content:$pipeMenu"`"
 exitStatus=$?

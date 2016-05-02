@@ -30,8 +30,8 @@ corgiObPowerManagementCpuLib="$parentDirectory/lib/corgi/openbox/menus/corgi-ope
 
 if [ ! -e "$corgiObPowerManagementCpuLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Menu library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Menu library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Menu library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Menu library is missing. Exiting..."
   exit $exitStatus
 fi
 

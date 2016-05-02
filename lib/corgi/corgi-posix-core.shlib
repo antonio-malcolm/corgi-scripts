@@ -39,9 +39,9 @@ corgiNoBone='_CORGI-NO-BONE_'
 # 1 indicates the arg is either empty or matches Corgi's indicator string.
 #
 # $1 - value, required, to be checked for emptiness
-corgiHasArg() {
+corgiArgIsNotEmpty() {
 
-  if [ ! -z "$1" -a "$1" != "$corgiNoBone" ]
+  if [ ! -z "$1" ] && [ "$1" != "$corgiNoBone" ]
   then
     return 0
   fi
@@ -310,6 +310,40 @@ corgiReplaceAllOccurrencesOfSubstring() {
 
   echo "$resultString$currentString"
   exit $?
+
+}
+
+
+# Echoes the value from a space-delimited name-value pair.
+#
+# Note: this function expects 2 arguments, but only as the minimum.
+# Example: in the case that a field value contains spaces, each portion will be a separate
+# arg by the time it is passed to this function, which will then combine them.
+#
+# $1 - string, required, the field name
+# $2 - any, required, the field value
+corgiGetValueFromSpaceDelimitedNameValuePair() {
+
+  shift
+
+  value="$1"
+
+  argCount=$#
+
+  if [ $argCount -gt 1 ]
+  then
+
+    lastValueIdx=$(($argCount - 1))
+
+    for idx in `seq 1 $lastValueIdx`
+    do
+      value="$value `corgiFetchNthArg $idx "$@"`"
+    done
+
+  fi
+
+  echo "$value"
+  exit 0
 
 }
 

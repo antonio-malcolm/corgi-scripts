@@ -12,7 +12,7 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-power-management-cpu.shlib - Functions used to describe and manage power management and throttling options for CPUs, 
+# corgi-power-management-cpu.shlib - Functions used to describe and manage power management and throttling options for CPUs, 
 #                                                  using /proc/cpuinfo and cpupower as backends.
 #
 # v2016.07.17
@@ -34,8 +34,8 @@ corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
 
 if [ ! -e "$corgiCoreLib" ]
 then
-  logger "ERROR (corgi-power-management-cpu.shlib): The core Corgi library is not present. Exiting..."
-  echo "ERROR (corgi-power-management-cpu.shlib): The core Corgi library is not present. Exiting..."
+  logger "ERROR (corgi-power-management-cpu.shlib): $corgiCoreLib is missing. Exiting..."
+  echo "ERROR (corgi-power-management-cpu.shlib): $corgiCoreLib is missing. Exiting..."
   exit 1
 fi
 
@@ -520,9 +520,16 @@ setSpeedOnCpus() {
       response="$response $messagePrefix"
     fi
     
-    response=" $processorIds, $messageSuffix"	
+    response=" $processorIds, $messageSuffix"
   	
-  	notify-send -u 'critical' "$response"
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi 	
+  	
     echo "ERROR (corgi-power-management-cpu.shlib): $response"
     logger "ERROR (corgi-power-management-cpu.shlib): $response"
     
@@ -634,7 +641,13 @@ setSpeedOnCpus() {
       
       response="$response now set to $option frequency of $desiredSpeed MHz"
       
-      notify-send -u 'normal' "$response"
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="normal" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --info --title="Success" --text="$response"
+      fi       
     
     fi
     
@@ -651,8 +664,15 @@ setSpeedOnCpus() {
       else
         response="$response $failedProcessorIds"
       fi
-    
-      notify-send -u 'critical' "$response"
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="critical" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --error --title="Failure" --text="$response"
+      fi       
+      
       echo "ERROR (corgi-power-management-cpu.shlib): $response"
       logger "ERROR (corgi-power-management-cpu.shlib): $response"
   
@@ -714,9 +734,16 @@ setGovernorOnCpus() {
       response="$response $messagePrefix"
     fi
     
-    response=" $processorIds, \"$desiredGovernor\" is not an available option"	
+    response=" $processorIds, \"$desiredGovernor\" is not an available option"
   	
-  	notify-send -u 'critical' "$response"
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi 	
+  	
     echo "ERROR (corgi-power-management-cpu.shlib): $response"
     logger "ERROR (corgi-power-management-cpu.shlib): $response"
     
@@ -730,7 +757,7 @@ setGovernorOnCpus() {
   fi
     
   cpuFrequencySetCommand="cpupower --cpu $processorIds frequency-set --governor $desiredGovernor"
-  authenticationMessage="Setting the CPU performance bias requires an Administrator's password."
+  authenticationMessage="Setting the CPU governor requires an Administrator's password."
 
   gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
     
@@ -790,7 +817,13 @@ setGovernorOnCpus() {
       
       response="$response, governor now set to $desiredGovernor"
       
-      notify-send -u 'normal' "$response"
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="normal" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --info --title="Success" --text="$response"
+      fi     
     
     fi
     
@@ -807,8 +840,15 @@ setGovernorOnCpus() {
       else
         response="$response $failedProcessorIds"
       fi
-    
-      notify-send -u 'critical' "$response"
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="critical" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --error --title="Failure" --text="$response"
+      fi       
+      
       echo "ERROR (corgi-power-management-cpu.shlib): $response"
       logger "ERROR (corgi-power-management-cpu.shlib): $response"
   
@@ -851,9 +891,16 @@ setPerfBiasOnCpus() {
       response="$response $messagePrefix"
     fi
     
-    response=" $processorIds, $desiredPerfBias is outside the range of 0 to 15"	
+    response=" $processorIds, $desiredPerfBias is outside the range of 0 to 15"
   	
-  	notify-send -u 'critical' "$response"
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi  	
+  	
     echo "ERROR (corgi-power-management-cpu.shlib): $response"
     logger "ERROR (corgi-power-management-cpu.shlib): $response"
     
@@ -926,7 +973,13 @@ setPerfBiasOnCpus() {
       
       response="$response now set to a performance bias of $desiredPerfBias"
       
-      notify-send -u 'normal' "$response"
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="normal" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --info --title="Success" --text="$response"
+      fi       
     
     fi
     
@@ -943,8 +996,15 @@ setPerfBiasOnCpus() {
       else
         response="$response $failedProcessorIds"
       fi
-    
-      notify-send -u 'critical' "$response"
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="critical" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --error --title="Failure" --text="$response"
+      fi       
+      
       echo "ERROR (corgi-power-management-cpu.shlib): $response"
       logger "ERROR (corgi-power-management-cpu.shlib): $response"
   

@@ -25,14 +25,12 @@ currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
 
-parentDirectory='/home/antonio/Projects/corgi-scripts'
-
 corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
 
 if [ ! -e "$corgiCoreLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-core.shlib): The core Corgi library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menus-core.shlib): The core Corgi library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-core.shlib): $corgiCoreLib is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-core.shlib): $corgiCoreLib is missing. Exiting..."
   exit 1
 fi
 
@@ -46,7 +44,7 @@ corgiObPipeMenuImpl() {
 
   content="$1"
 
-  if corgiHasArg "$content"
+  if corgiArgIsNotEmpty "$content"
   then
     echo "<openbox_pipe_menu>$content</openbox_pipe_menu>"
   else
@@ -75,29 +73,29 @@ corgiObMenuImpl() {
   execute="$4"
   content="$5"
 
-  if corgiHasArg "$id"
+  if corgiArgIsNotEmpty "$id"
   then
     menu="$menu id=\"$id\""
   fi
 
-  if corgiHasArg "$label"
+  if corgiArgIsNotEmpty "$label"
   then
     menu="$menu label=\"$label\""
   fi
 
-  if corgiHasArg "$icon"
+  if corgiArgIsNotEmpty "$icon"
   then
     menu="$menu icon=\"$icon\""
   fi
 
-  if corgiHasArg "$execute"
+  if corgiArgIsNotEmpty "$execute"
   then
     menu="$menu execute=\"$execute\""
   fi
 
   menu="$menu>"
 
-  if corgiHasArg "$content"
+  if corgiArgIsNotEmpty "$content"
   then
     menu="$menu$content"
   fi
@@ -127,29 +125,29 @@ corgiObMenuItemImpl() {
   command="$4"
   prompt="$5"
 
-  if corgiHasArg "$label"
+  if corgiArgIsNotEmpty "$label"
   then
     menuItem="$menuItem label=\"$label\""
   fi
 
-  if corgiHasArg "$icon"
+  if corgiArgIsNotEmpty "$icon"
   then
     menuItem="$menuItem icon=\"$icon\""
   fi
 
   menuItem="$menuItem>"
 
-  if corgiHasArg "$action"
+  if corgiArgIsNotEmpty "$action"
   then
 
     menuItem="$menuItem<action name=\"$action\">"
 
-  if corgiHasArg "$prompt"
+  if corgiArgIsNotEmpty "$prompt"
     then
       menuItem="$menuItem<prompt>$prompt</prompt>"
     fi
       
-    if corgiHasArg "$command" && [ "$action" = "Execute" ]
+    if corgiArgIsNotEmpty "$command" && [ "$action" = "Execute" ]
     then
       menuItem="$menuItem<command>$command</command>"
     fi
@@ -173,7 +171,7 @@ corgiObMenuSeparatorImpl() {
 
   label="$1"
 
-  if corgiHasArg "$label"
+  if corgiArgIsNotEmpty "$label"
   then
     echo "<separator label=\"$label\" />"
   else 

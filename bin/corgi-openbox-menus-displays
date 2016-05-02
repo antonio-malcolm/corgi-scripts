@@ -30,8 +30,8 @@ corgiObMenusDisplaysLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-
 
 if [ ! -e "$corgiObMenusDisplaysLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Displays Menu library is not present. Exiting..."
-  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Displays Menu library is not present. Exiting..."
+  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Displays Menu library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Displays Menu library is missing. Exiting..."
   exit $exitStatus
 fi
 

@@ -1,0 +1,133 @@
+#!/bin/sh
+
+# Copyright 2016 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
+#
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
+
+# corgi-audio-management.shlib - handles management of audio features, such as volume and muting, 
+#                                using alsa and pulseaudio as backends
+#
+# v2016.04.10
+#
+# Authored by Antonio Malcolm
+#
+#
+# Requires: the Alsa lib, for control of devices
+
+
+if ! command -v amixer > /dev/null
+then
+  logger "ERROR (corgi-audio-management.shlib): amixer not found. Please install Alsa. Exiting..."
+  echo "ERROR (corgi-audio-management.shlib): amixer not found. Please install Alsa. Exiting..."
+  exit 1
+fi
+
+hasPulseAudio=false
+
+if command -v pacmd > /dev/null
+then
+	
+  alsaPulseSinkConfirmation="`arecord -L | grep 'pulse'`"
+	
+  if [ ! -z "$alsaPulseSinkConfirmation" ] && [ "$alsaPulseSinkConfirmation" = 'pulse' ]
+  then
+    hasPulseAudio=true
+  fi 
+
+fi
+
+setAudio() {
+
+  audioHandler=amixer
+
+  option="$1"
+  enforceAlsaOnly=$2
+
+  if [ "$option" = 'percent' ]
+  then
+		
+    percentage=$2
+    enforceAlsaOnly=$3
+	
+    if [ -z "$percentage" ]
+    then
+      percentage=25
+    elif [ $percentage = true ] || [ $percentage = false ]
+    then
+      enforceAlsaOnly=$percentage
+      percentage=25
+    fi
+	  
+    if [ $percentage -lt 0 ]
+    then
+      percentage=0
+    elif [ $percentage -gt 100 ]
+    then
+      percentage=100
+    fi
+	
+  fi
+	
+	if [ -z "$enforceAlsaOnly" ] || [ $enforceAlsaOnly != true ]
+	then
+	  enforceAlsaOnly=false	
+  fi
+	
+  if [ $enforceAlsaOnly = false ] && [ $hasPulseAudio = true ]
+  then
+  	audioHandler="$audioHandler --device pulse"
+  fi  	
+
+  case "$option" in
+
+    'up') $audioHandler 'sset' 'Master' '5%+' ;;
+    'down') $audioHandler 'sset' 'Master' '5%-' ;;
+    'min') $audioHandler 'sset' 'Master' '25%' ;;
+    'max') $audioHandler 'sset' 'Master' '100%' ;;
+    'percent') $audioHandler 'sset' 'Master' "$percentage%" ;;
+
+    'mute')
+
+      $audioHandler 'sget' 'Master' | {
+      
+        muteDirective='unmute'
+
+        while read -r line
+        do
+
+          case "$line" in 
+
+            *'[on]'*)
+              muteDirective='mute'
+              break
+            ;;
+
+            *'[off]'*)
+              muteDirective='unmute'
+              break
+            ;;
+
+          esac
+
+        done
+
+        $audioHandler 'sset' 'Master' "$muteDirective"
+        exit $?
+
+      }
+
+    ;;
+
+  esac
+  
+  exit $?
+
+}
