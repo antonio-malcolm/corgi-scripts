@@ -1148,13 +1148,13 @@ parseSetDisplays() {
 
 
 # Sets the positions for the specified displays, as well as which is primary, by way of an ordered, 
-# comma-delimited string of connection names, the name of the primary. Also sets provider and source for
+# comma-delimited string of connection names and the name of the primary. Also sets provider and source for
 # Reverse PRIME GPU configuration. In the case of Nvidia Reverse PRIME support, automates compensating
 # for Nvidia's panning, across external displays, when a laptop is being used. 
 # (In such a scenario, Nvidia applies the total of ALL display widths to the external displays, 
-#  to include that of the internal display, which results in panning on the first and last external displays, 
-#  with the internal display's content also on the external- 
-#  by providing a simple boolean, this function will eliminate the described issue.)
+#  to include that of the internal display, which results in on the external displays, 
+#  with the internal display's content included in the panned content- 
+#  by providing a simple boolean, this function will eliminate that issue.)
 #
 # This functioon also supports a callback, to be triggered upon completion of the function.
 #
