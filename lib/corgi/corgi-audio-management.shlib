@@ -79,7 +79,7 @@ setAudio() {
   if [ "$option" = 'mute' ]
   then
   	enforceAlsaOnly=true	
-	fi
+  fi
 	
 	if [ -z "$enforceAlsaOnly" ] || [ $enforceAlsaOnly != true ]
 	then

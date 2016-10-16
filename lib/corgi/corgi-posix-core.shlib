@@ -109,9 +109,9 @@ corgiFetchSubstringBefore() {
 
   fullString="$1"
   delimiter="$2"
-  orientation="$3"
+  position="$3"
 
-  if [ "$orientation" = 'first' ]
+  if [ "$position" = 'first' ]
   then
     substring="${fullString%%"$delimiter"*}"
   else
@@ -577,6 +577,54 @@ corgiTrimWhiteSpace() {
 }
 
 
+# Returns one or zero, based on whether or not the provided arg is a positive number.
+#
+# $1 - value, required, to be checked for whether or not it is a positive number
+corgiIsPositiveNumber() {
+  
+  if expr "$1" : '[0-9][0-9]*$' > /dev/null
+  then
+    return 0
+  fi
+  
+  return 1
+
+}
+
+
+# Returns one or zero, based on whether or not the provided arg is a negative number.
+#
+# $1 - value, required, to be checked for whether or not it is a negative number
+corgiIsNegativeNumber() {
+  
+  if expr "$1" : '-*[0-9][0-9]*$' > /dev/null
+  then
+    return 0
+  fi
+  
+  return 1
+
+}
+
+
+# Returns one or zero, based on whether or not the provided arg is a number.
+#
+# $1 - value, required, to be checked for whether or not it is a number
+corgiIsNumber() {
+
+	if corgiIsPositiveNumber "$1"
+	then
+	  return 0
+	elif corgiIsNegativeNumber "$1"
+	then
+	  return 0
+	fi
+	
+	return 1
+
+}
+
+
 corgiDeriveNumberFromPercentage() {
 		
 	percentage=$1
@@ -755,7 +803,8 @@ corgiMountPointHasMount() {
 #
 # $1 - function, callback, the function or utility call being wrapped
 # $2 - string, argument names, comma-delimited, should match the names present in the name-value pairs provided to the function's wrapper function,
-#      and be provided in the order respective to the arguments expected by the wrapped callback function (i.e., "name1,name2,name3", to match callback -ption $arg1 $arg2 $arg3)
+#      and be provided in the order respective to the arguments expected by the wrapped callback function
+#      (i.e., "name1,name2,name3", to match callback option $arg1 $arg2 $arg3)
 corgiParseShellRequestImpl() {
 
   callbackArgs=''

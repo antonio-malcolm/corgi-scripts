@@ -1,0 +1,233 @@
+#!/bin/sh
+
+# Copyright 2016 Antonio Malcolm, released under an MPL, v. 2.0, license. All rights reserved.
+#
+# This file is part of Corgi Scripts (also referred to as corgi-scripts).
+#
+# Corgi Scripts is subject to the terms of the Mozilla Public License, v. 2.0. 
+# If a copy of the MPL was not distributed with this file, 
+# you can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Corgi Scripts is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either expressed or implied.
+# See LICENSE.txt, for the specific language governing rights and limitations under the License,
+# which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
+
+# corgi-power-management-battery.shlib - Functions used to poll battery status, and, if specified to do so, 
+#                                        automatically sleep or hibernate the host when a specified minimum percentage
+#                                        of battery power remaining is reached.
+#
+# v2016.10.15
+#
+# Authored by Antonio Malcolm
+#
+# Requires: corgi-posix-core.shlib
+# Requires: upower - to check the AC power and battery statuses
+# Optional: zenity - to warn the user of low battery percentage remaining status
+# Optional: zzz - for sleep (suspend to RAM)
+# Optional: ZZZ - for hibernate (suspend to disk)
+
+
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+
+corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
+
+if [ ! -e "$corgiCoreLib" ]
+then
+  logger "ERROR (corgi-power-management-battery.shlib): $corgiCoreLib is missing. Exiting..."
+  echo "ERROR (corgi-power-management-battery.shlib): $corgiCoreLib is missing. Exiting..."
+  exit 1
+fi
+
+if ! command -v upower > /dev/null
+then
+  logger "ERROR (corgi-power-management-battery.shlib): upower is missing. Exiting..."
+  echo "ERROR (corgi-power-management-battery.shlib): upower is missing. Exiting..."
+  exit 1
+fi
+
+. "$corgiCoreLib"
+
+hasSleep=false
+hasHibernate=false
+hasZenity=false
+
+if ! command -v zzz > /dev/null
+then
+  logger "WARN (corgi-power-management-battery.shlib): zzz not found. Please install zzz, else we can not suspend to RAM"
+else 
+  hasSleep=true
+fi
+
+if ! command -v ZZZ > /dev/null
+then
+  logger "WARN (corgi-power-management-battery.shlib): ZZZ not found. Please install ZZZ, else we can not suspend to disk"
+else 
+  hasHibernate=true
+fi
+
+if ! command -v zenity > /dev/null
+then
+  logger "WARN (corgi-power-management-battery.shlib): zenity not found. We can't warn the user of low battery percentage remaining without it. Please install zenity."
+else
+  hasZenity=true
+fi
+
+
+# NOTE: This is the IMPLEMENTATION method. You probably want to call pollBatteryStatus(),
+# which implements this method, with job control (&), to place it in the background.
+#
+# Polls battery status in a loop.
+# Logs and warns the user of low battery percentage remaining.
+# Per a specified percentage threshold, sleeps or hibernates the machine,
+# or executes a command, if a command is provided.
+#
+# $1 - number, optional, the frequency, on seconds, at which polling should occur - defaults to 30
+# $2 - string, optional, the action or command to occur when the battery percentage remaining threshold is reached -
+#      options are "hibernate" (suspends the machine state to disk),
+#      "sleep" (suspends the machine state to RAM),
+#      or a command -
+#      defaults to "sleep"
+# $3 - number, optional, the percentage threshold, at which the specified action or command should occur -
+#      defaults to 10
+pollBatteryStatusImpl() {
+
+  pollingFrequency=$1
+  thresholdAction="$2"
+  thresholdActionPercentage=$3
+  
+  # Default polling to every 30 seconds...
+  if [ -z "$pollingFrequency" ]
+  then
+    pollingFrequency=30
+  fi
+  
+  # Default suspend to RAM...
+  if [ -z "$thresholdAction" ]
+  then
+    thresholdAction='sleep'
+  fi
+  
+  # Default threshold to 10 percent...
+  if [ -z "$thresholdActionPercentage" ]
+  then
+    thresholdActionPercentage=10
+  fi  
+  
+  if ! corgiIsPositiveNumber $pollingFrequency
+  then
+    echo "'$pollingFrequency' is not a positive number (not a valid polling frequency)! Exiting..."
+    logger "ERROR (corgi-power-management-battery.shlib): '$pollingFrequency' is not a positive number (not a valid polling frequency)! Exiting..."
+    exit 1
+  fi
+  
+  if ! corgiIsPositiveNumber $thresholdActionPercentage
+  then
+    echo "'$thresholdActionPercentage' is not a positive number (not a valid threshold percentage)! Exiting..."
+    logger "ERROR (corgi-power-management-battery.shlib): '$thresholdActionPercentage' is not a positive number (not a valid threshold percentage)! Exiting..."
+    exit 1
+  fi
+  
+  if [ $thresholdActionPercentage -gt 89 ] || [ $thresholdActionPercentage -lt 10 ]
+  then
+    echo "'$thresholdActionPercentage' is not a number between 10 and 90 (not a valid threshold percentage)! Exiting..."
+    logger "ERROR (corgi-power-management-battery.shlib): '$thresholdActionPercentage' is not a number between 10 and 90 (not a valid threshold percentage)! Exiting..."
+    exit 1
+  fi  
+  
+  thresholdActionCommand='zzz'
+  thresholdActionMessage='Suspending to'
+  thresholdWarningPercentage=$((thresholdActionPercentage + 10))
+  thresholdWarningMessage='The machine will suspend to'
+  
+  case "$thresholdAction" in
+  
+    'hibernate')
+      thresholdActionCommand='ZZZ'
+      thresholdActionMessage="$thresholdActionMessage disk"
+      thresholdWarningMessage="$thresholdWarningMessage disk"    
+    ;;
+    
+    'sleep')
+      thresholdActionCommand='zzz'
+      thresholdActionMessage="$thresholdActionMessage RAM"
+      thresholdWarningMessage="$thresholdWarningMessage RAM"    
+    ;;
+    
+    *)
+      thresholdActionCommand="$thresholdAction"
+      thresholdActionMessage="Executing specified command: $thresholdAction"
+      thresholdWarningMessage="The machine will execute specified command: $thresholdAction" 
+    ;;
+  
+  esac
+  
+  thresholdActionMessage="Battery percentage remaining is $batteryPercentageRemaining%. $thresholdActionMessage"
+  thresholdWarningMessage="Battery percentage remaining is $batteryPercentageRemaining%!\n$thresholdWarningMessage, when percentage remaining reaches $thresholdActionPercentage%"
+  
+  hasServedThresholdWarning=false
+  
+  while [ true ]
+  do
+  
+  	acPowerStatus=`upower -i $(upower -e | grep 'AC') | grep -E online|xargs|cut -d' ' -f2|sed s/%//`
+  	
+  	if [ "$acPowerStatus" = 'yes' ]
+  	then
+  	  continue
+  	fi
+  
+    batteryPercentageRemaining=`upower -i $(upower -e | grep 'BAT') | grep -E percentage|xargs|cut -d' ' -f2|sed s/%//`
+
+    if [ $batteryPercentageRemaining -le $thresholdWarningPercentage ] && [ $hasServedThresholdWarning = false ]
+    then
+
+      if [ $hasZenity = true ]
+      then
+        zenity --warning --title="Low Battery Warning" --text="$thresholdWarningMessage"
+      fi
+      
+      logger "INFO (corgi-power-management-battery.shlib): $thresholdWarningMessage"
+      
+      hasServedThresholdWarning=true
+    
+    fi
+    
+    if [ $batteryPercentageRemaining -le $thresholdActionPercentage ]
+    then
+      logger "INFO (corgi-power-management-battery.shlib): $thresholdActionMessage"
+      hasServedThresholdWarning=false
+      $thresholdActionCommand
+    fi
+      
+    sleep $pollingFrequency
+  
+  done
+  
+  exit $?
+
+}
+
+
+# Because the logic in pollBatteryStatusImpl() involves a loop which does not exit,
+# this method implements the implementation method, with job control (&),
+# to place it in the background.
+pollBatteryStatus() {
+	pollBatteryStatusImpl "$@" &
+}
+
+
+# Kills the battery polling process
+stopPollingBatteryStatus() {
+
+  psBatteryPollingOut=`ps aux | grep '[p]ollBatteryStatus'`
+  
+  if [ ! -z "$psBatteryPollingOut" ]
+  then
+    killall pollBatteryStatus
+  fi
+  
+  exit $?
+
+}

@@ -517,27 +517,27 @@ moveDisplay() {
 
   name="$1"
   axis="$2"
-  orientation="$3"
-  adjacentName="$4"
+  adjacency="$3"
+  adjacentTo="$4"
   primaryName="$5"
 
-  moveDisplayCommand="xrandr --output $name --left-of $adjacentName"
+  moveDisplayCommand="xrandr --output $name --left-of $adjacentTo"
 
   if [ "$axis" = 'y' ]
   then
 
-    moveDisplayCommand="xrandr --output $name --above $adjacentName"
+    moveDisplayCommand="xrandr --output $name --above $adjacentTo"
 
-    if [ "$orientation" = 'below' ]
+    if [ "$adjacency" = 'below' ]
     then
-      moveDisplayCommand="xrandr --output $name --below $adjacentName"
+      moveDisplayCommand="xrandr --output $name --below $adjacentTo"
     fi
 
   fi
 
-  if [ "$orientation" = 'right' ]
+  if [ "$adjacency" = 'right' ]
   then
-    moveDisplayCommand="xrandr --output $name --right-of $adjacentName"
+    moveDisplayCommand="xrandr --output $name --right-of $adjacentTo"
   fi
 
   # Prevent xrandr from segfaulting with Nvidia Optimus,
@@ -552,7 +552,7 @@ moveDisplay() {
 
     if [ "$name" = "$primaryName" ]
     then
-      swapPrimaryCommand="xrandr --output $adjacentName --primary"  
+      swapPrimaryCommand="xrandr --output $adjacentTo --primary"  
     fi
 
     $swapPrimaryCommand && {
@@ -570,12 +570,12 @@ moveDisplay() {
         if [ -z "$response" ]
         then
 
-          if [ "$orientation" = 'left' ] || [ "$orientation" = 'right' ]
+          if [ "$adjacency" = 'left' ] || [ "$adjacency" = 'right' ]
           then
-            orientation="$orientation of"
+            adjacency="$adjacency of"
           fi
  
-          response="Moved display $name $orientation $adjacentName"
+          response="Moved display $name $adjacency $adjacentTo"
 
         fi
 
@@ -602,12 +602,12 @@ moveDisplay() {
       if [ -z "$response" ]
       then
 
-        if [ "$orientation" = 'left' ] || [ "$orientation" = 'right' ]
+        if [ "$adjacency" = 'left' ] || [ "$adjacency" = 'right' ]
         then
-          orientation="$orientation of"
+          adjacency="$adjacency of"
         fi
  
-        response="Display '$name' is now $orientation '$adjacentName'"
+        response="Display '$name' is now $adjacency '$adjacentTo'"
 
       fi
 
@@ -1104,7 +1104,6 @@ parseSetDisplays() {
   useReversePrimeSource=$5
   compensateForPrimePanning=$6
   callback=$7
-  callbackArgs=''
 
   if [ ! -z "$useReversePrimeProvider" ] && [ ! -z "$useReversePrimeSource" ]
   then

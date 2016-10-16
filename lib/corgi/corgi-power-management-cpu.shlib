@@ -70,6 +70,22 @@ fi
 dataDelimiter=','
 
 
+# Obtains and echoes descriptive data, from the system, with a row name
+# which matches the provided name, for the processor with an id matching the provided id.
+#
+# $1 - string, required, the id for the processor for which data is being obtained
+# $2 - true or false, optional, sets whether or not the provided id belongs to
+#      a physical or logical processor (i.e., a core or thread) - defaults to false
+# $3 - string, required, the row name for data which should be echoed
+# $4 ($6, if 5 or more args are provided) - true or false, I can't remember what the fuck this was for.
+#      I wrote the documentation some months after writing the function.
+#      I believe it is to obtain the data of a single logical processor (core or thread)
+#      I will update this documentation in the near future...
+#
+# $4 (if 5 or more args are provided) - string, optional, to match against a processor with
+#     data containing a row with the provided name
+# $5 (if 5 or more args are provided) - string, optional, to match against a processor with
+#     data containing a row with the provided value 
 getCpuInfo() {
   
   processorIdLabel='processor'
@@ -192,6 +208,12 @@ getCpuInfo() {
 }
 
 
+# Obtains and echoes the minimum and maximum frequencies, in MHz, as well as the governor,
+# supported or currently made available by the processor with an id matching the provided id.
+#
+# $1 - string, required, the id for the processor for which min and max frequencies and governor are being determined
+# $2 - string, optional, determines whether or not the governor should be echoed with the frequencies supported by the processor,
+#      defaults to "--policy" (obtains and echoes the governor info)
 getCpuFrequencyInfo() {
 
   frequencyInfoOption='--hwlimits'
@@ -244,6 +266,11 @@ getCpuFrequencyInfo() {
 }
 
 
+# Obtains and echoes descriptive data, from cpupower, with a row name
+# which matches the provided name, for the processor with an id matching the provided id.
+#
+# $1 - string, required, the id for the processor for which data is being obtained
+# $2 - string, required, the row name for data which should be echoed
 getCpuPowerInfo() {
   
   processorId="$1"
@@ -274,6 +301,14 @@ getCpuPowerInfo() {
   
 }
 
+
+# Obtains and echoes the minimum and maximum frequencies, in MHz, 
+# supported or currently made available by the processors with ids matching the provided ids.
+#
+# $1 - string, required, comma-delimited list of ids for processors for which min and max frequencies are being determined
+# $2 - true or false, optional, determines whether or not the echoed frequencies should be the min and max supported by the processor,
+#      or those currently available (i.e., set by the user) -
+#      defaults to false
 getMinAndMaxFrequencies() {
   
   minSpeed=''
@@ -351,6 +386,9 @@ getMinAndMaxFrequencies() {
 }
 
 
+# Returns one or zero,based on whether or not the processor with an id matching the provided id has boost support.
+#
+# $1 - string, required, the processor id for the processor for which boost support is being determined
 cpuHasBoostSupport() {
   
   processorId="$1"
@@ -368,6 +406,13 @@ cpuHasBoostSupport() {
   
 }
 
+
+# Obtains and echoes the current boost state for the processor with an id matching the provided id.
+#
+# $1 - string, required, the processor id for the processor for which the boost state is being obtained
+# $2 - true or false, optional, determines whether or not the echoed state should be specific, i.e.,
+#      whether or not it should be stated that boost is enabled or disabled, vs supported or unsupported - 
+#      defaults to false
 getCpuBoostState() {
   
   state='unsupported'
@@ -409,6 +454,18 @@ getCpuBoostState() {
 }
 
 
+# Sets the speed, in either MHz, or percentage of maximum available frequency,
+# on processors with ids matching the provided ids.
+#
+# $1 - string, required, comma-delimited list of ids for processors on which the desired governor setting should be set
+# $2 - string, optional, the speed setting option, determines whether the speed setting should be absolute (no range),
+#      a minimum available speed (range minimum), or a maximum available speed (range maximum)
+# $3 - number, required, the desired speed, in MHz, or percentage of maximum available frequency,
+#      to be set on the processors
+# $4 - true or false, optional, determines whether or not the provided speed should be treated as a
+#      percentage of maximum available frequency - defaults to false
+# $5 - string, optional, user message prefix, used for success and error status messages -
+#      defaults to 'Processor'
 setSpeedOnCpus() {
   
   response=''
@@ -687,6 +744,12 @@ setSpeedOnCpus() {
 }
 
 
+# Sets the governor on processors with ids matching the provided ids.
+#
+# $1 - string, required, comma-delimited list of ids for processors on which the desired governor setting should be set
+# $2 - string, required, the governor to be set on the processors
+# $3 - string, optional, user message prefix, used for success and error status messages -
+#      defaults to 'Processor'
 setGovernorOnCpus() {
   
   response=''
@@ -863,6 +926,12 @@ setGovernorOnCpus() {
 }
 
 
+# Sets the performance bias on processors with ids matching the provided ids.
+#
+# $1 - string, required, comma-delimited list of ids for processors on which the desired bias setting should be set
+# $2 - number, required, the bias level to be set on the processors (normally, this should be a number ranging from 0 and 15)
+# $3 - string, optional, user message prefix, used for success and error status messages -
+#      defaults to 'Processor'
 setPerfBiasOnCpus() {
   
   response=''
