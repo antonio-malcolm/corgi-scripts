@@ -624,7 +624,10 @@ corgiIsNumber() {
 
 }
 
-
+# Given a percentage and a number, echoes a number which makes that percentage.
+#
+# $1 - number, required, the percentage
+# $2 - number, required, the number from which the percentage is taken
 corgiDeriveNumberFromPercentage() {
 		
 	percentage=$1

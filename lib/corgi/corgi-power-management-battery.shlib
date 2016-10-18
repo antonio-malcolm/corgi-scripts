@@ -16,7 +16,7 @@
 #                                        automatically sleep or hibernate the host when a specified minimum percentage
 #                                        of battery power remaining is reached.
 #
-# v2016.10.15
+# v2016.10.16
 #
 # Authored by Antonio Malcolm
 #
@@ -75,22 +75,22 @@ else
 fi
 
 
-# NOTE: This is the IMPLEMENTATION method. You probably want to call pollBatteryStatus(),
+# NOTE: This is the IMPLEMENTATION method. You probably want to call #pollBatteryStatus(),
 # which implements this method, with job control (&), to place it in the background.
 #
-# Polls battery status in a loop.
-# Logs and warns the user of low battery percentage remaining.
+# Polls the battery status in a loop.
+# Logs and alerts the user to low battery percentage remaining.
 # Per a specified percentage threshold, sleeps or hibernates the machine,
 # or executes a command, if a command is provided.
 #
-# $1 - number, optional, the frequency, on seconds, at which polling should occur - defaults to 30
+# $1 - number, optional, the frequency, in seconds, at which polling should occur - defaults to 30
 # $2 - string, optional, the action or command to occur when the battery percentage remaining threshold is reached -
 #      options are "hibernate" (suspends the machine state to disk),
 #      "sleep" (suspends the machine state to RAM),
 #      or a command -
 #      defaults to "sleep"
 # $3 - number, optional, the percentage threshold, at which the specified action or command should occur -
-#      defaults to 10
+#      defaults to 10 (user alert occurs at 10% higher than this threshold)
 pollBatteryStatusImpl() {
 
   pollingFrequency=$1
