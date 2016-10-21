@@ -12,53 +12,29 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-power-management-battery - handles management of battery status polling and the
-#                                  automation of actions to be taken upon low battery status
+# corgi-screen-lock - handles screen locking with background image manipulation and text
 #
 # v2016.10.21
 #
 # Authored by Antonio Malcolm
 #
 # 
-# Requires: corgi-power-management-battery.shlib
+# Requires: corgi-screen-lock.shlib
 
 
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
 
-corgiPowerManagementBatteryLib="$parentDirectory/lib/corgi/corgi-power-management-battery.shlib"
+corgiScreenLockLib="$parentDirectory/lib/corgi/corgi-screen-lock.shlib"
 
-if [ ! -e "$corgiPowerManagementBatteryLib" ]
+if [ ! -e "$corgiScreenLockLib" ]
 then
-  logger "ERROR (corgi-power-management-battery): $corgiPowerManagementBatteryLib is missing. Exiting..."
-  echo "ERROR (corgi-power-management-battery): $corgiPowerManagementBatteryLib is missing. Exiting..."
+  logger "ERROR (corgi-screen-lock): $corgiScreenLockLib is missing. Exiting..."
+  echo "ERROR (corgi-screen-lock): $corgiScreenLockLib is missing. Exiting..."
   exit 1
 fi
 
-. "$corgiPowerManagementBatteryLib"
+. "$corgiScreenLockLib"
 
-case "$1" in
-
-  'polling')
-  
-    case "$2" in
-    
-      'start')
-      
-        shift
-        shift
-
-        pollBatteryStatus "$@"
-        
-      ;;
-      
-      'stop') pkill -f 'corgi-power-management-battery polling start' ;;
-    
-    esac
-  
-  ;;
-
-esac
-
-exit $?
+lockScreen "$@"

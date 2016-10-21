@@ -73,7 +73,7 @@ then
     if mkdir -p "$prefix/bin"
     then
 
-      if cp -r "$currentDirectory/bin/"* "$prefix/bin/"
+      if chmod a+x "$currentDirectory/bin/"* && cp -r "$currentDirectory/bin/"* "$prefix/bin/"
       then
         echo "SUCCESS (corgi-scripts/install.sh): Installed executable scripts under $prefix/bin/"
       else

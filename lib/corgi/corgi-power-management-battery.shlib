@@ -16,7 +16,7 @@
 #                                        automatically sleep or hibernate the host when a specified minimum percentage
 #                                        of battery power remaining is reached.
 #
-# v2016.10.16
+# v2016.10.21
 #
 # Authored by Antonio Malcolm
 #
@@ -94,8 +94,11 @@ fi
 pollBatteryStatusImpl() {
 
   pollingFrequency=$1
-  thresholdAction="$2"
-  thresholdActionPercentage=$3
+  shift
+  thresholdActionPercentage=$1
+  shift
+  thresholdAction="$1"
+  shift
   
   # Default polling to every 30 seconds...
   if [ -z "$pollingFrequency" ]
@@ -103,17 +106,17 @@ pollBatteryStatusImpl() {
     pollingFrequency=30
   fi
   
-  # Default suspend to RAM...
-  if [ -z "$thresholdAction" ]
-  then
-    thresholdAction='sleep'
-  fi
-  
-  # Default threshold to 10 percent...
+   # Default threshold to 10 percent...
   if [ -z "$thresholdActionPercentage" ]
   then
     thresholdActionPercentage=10
   fi  
+  
+  # Default suspend to RAM...
+  if [ -z "$thresholdAction" ]
+  then
+    thresholdAction='sleep'
+  fi 
   
   if ! corgiIsPositiveNumber $pollingFrequency
   then
@@ -129,13 +132,13 @@ pollBatteryStatusImpl() {
     exit 1
   fi
   
-  if [ $thresholdActionPercentage -gt 89 ] || [ $thresholdActionPercentage -lt 10 ]
+  if [ $thresholdActionPercentage -gt 100 ] || [ $thresholdActionPercentage -lt 10 ]
   then
     echo "'$thresholdActionPercentage' is not a number between 10 and 90 (not a valid threshold percentage)! Exiting..."
     logger "ERROR (corgi-power-management-battery.shlib): '$thresholdActionPercentage' is not a number between 10 and 90 (not a valid threshold percentage)! Exiting..."
     exit 1
   fi  
-  
+
   thresholdActionCommand='zzz'
   thresholdActionMessage='Suspending to'
   thresholdWarningPercentage=$((thresholdActionPercentage + 10))
@@ -157,14 +160,11 @@ pollBatteryStatusImpl() {
     
     *)
       thresholdActionCommand="$thresholdAction"
-      thresholdActionMessage="Executing specified command: $thresholdAction"
-      thresholdWarningMessage="The machine will execute specified command: $thresholdAction" 
+      thresholdActionMessage="Executing specified command:\n`corgiReplaceAllOccurrencesOfSubstring \"$thresholdAction\" '&' '&amp;'`"
+      thresholdWarningMessage="The machine will execute specified command:\n`corgiReplaceAllOccurrencesOfSubstring \"$thresholdAction\" '&' '&amp;'`"
     ;;
   
   esac
-  
-  thresholdActionMessage="Battery percentage remaining is $batteryPercentageRemaining%. $thresholdActionMessage"
-  thresholdWarningMessage="Battery percentage remaining is $batteryPercentageRemaining%!\n$thresholdWarningMessage, when percentage remaining reaches $thresholdActionPercentage%"
   
   hasServedThresholdWarning=false
   
@@ -183,6 +183,8 @@ pollBatteryStatusImpl() {
     if [ $batteryPercentageRemaining -le $thresholdWarningPercentage ] && [ $hasServedThresholdWarning = false ]
     then
 
+      thresholdWarningMessage="Battery percentage remaining is $batteryPercentageRemaining%!\n$thresholdWarningMessage\nwhen percentage remaining reaches $thresholdActionPercentage%"
+
       if [ $hasZenity = true ]
       then
         zenity --warning --title="Low Battery Warning" --text="$thresholdWarningMessage"
@@ -193,13 +195,18 @@ pollBatteryStatusImpl() {
       hasServedThresholdWarning=true
     
     fi
-    
+
     if [ $batteryPercentageRemaining -le $thresholdActionPercentage ]
     then
+
+    	thresholdActionMessage="Battery percentage remaining is $batteryPercentageRemaining%. $thresholdActionMessage"
+    	hasServedThresholdWarning=false
+    	
       logger "INFO (corgi-power-management-battery.shlib): $thresholdActionMessage"
-      hasServedThresholdWarning=false
-      $thresholdActionCommand
-    fi
+     
+      $thresholdActionCommand "$@"
+    
+   fi
       
     sleep $pollingFrequency
   
@@ -220,14 +227,6 @@ pollBatteryStatus() {
 
 # Kills the battery polling process
 stopPollingBatteryStatus() {
-
-  psBatteryPollingOut=`ps aux | grep '[p]ollBatteryStatus'`
-  
-  if [ ! -z "$psBatteryPollingOut" ]
-  then
-    killall pollBatteryStatus
-  fi
-  
+  pkill -f 'psBatteryPollingOut'
   exit $?
-
 }

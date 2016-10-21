@@ -1,0 +1,156 @@
+#!/bin/sh
+
+currentDirectory="`dirname "$0"`"
+currentDirectory="`cd "$currentDirectory" ; pwd -P `"
+parentDirectory="`dirname $currentDirectory`"
+
+corgiCoreLib="$parentDirectory/lib/corgi/corgi-posix-core.shlib"
+
+if [ ! -e "$corgiCoreLib" ]
+then
+  logger "ERROR (corgi-screen-lock): $corgiCoreLib is missing. Exiting..."
+  echo "ERROR (corgi-screen-lock): $corgiCoreLib is missing. Exiting..."
+  exit 1
+fi
+
+. "$corgiCoreLib"
+
+if ! command -v i3lock > /dev/null
+then
+  logger "ERROR (corgi-screen-lock): i3lock not found. Please install i3lock. Exiting..."
+  echo "ERROR (corgi-screen-lock): i3lock not found. Please install i3lock. Exiting..."
+  exit 1
+fi
+
+hasScrot=false
+hasMogrify=false
+
+if ! command -v scrot > /dev/null
+then
+  logger "WARN (corgi-screen-lock): scrot not found. We will not be able to create background images..."
+else 
+  hasScrot=true
+fi
+
+if ! command -v mogrify > /dev/null
+then
+  logger "WARN (corgi-screen-lock): mogrify/ImageMagick not found. We will not be able to make background image adjustments..."
+else 
+  hasMogrify=true
+fi
+
+
+currentUser="`corgiFetchCurrentUserInfo 'name'`"
+lockScreenBackdropDirectory="/home/$currentUser/.tmp/corgi-screen-lock"
+lockScreenBackdropFileName="backdrop.png"
+lockScreenBackdropFile="$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+
+createBackdrop() {
+
+  if [ $hasScrot = true ] && [ $hasMogrify = true ]
+  then
+
+    if [ ! -d "$lockScreenBackdropDirectory" ]
+    then
+      mkdir -p "$lockScreenBackdropDirectory"
+    fi
+
+    rm "$lockScreenBackdropDirectory"/*
+    scrot "$lockScreenBackdropFile"
+      
+  fi
+
+}
+
+
+appendBackdrop() {
+
+  if [ $hasMogrify = true ]
+  then
+
+    appendImage="$parentDirectory/share/icons/corgi/common/lock-round-light.png"
+
+    appendText="$1"
+    font="$2"
+    fontColor="$3"
+      
+    if [ "$lockScreenBackdropFile" = "$lockScreenBackdropDirectory/$lockScreenBackdropFileName" ]
+    then
+    	
+    	mogrify -fill '#000000' -colorize 33% \
+    	-filter Gaussian -resize 25% -define filter:sigma=1.25 -resize 400% \
+    	-font "$font" -fill "$fontColor" -pointsize 48 -gravity center \
+    	-annotate +0+160 "$appendText" -channel RGBA -blur 0x0.5 -gravity center \
+    	"$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+    	
+    else
+    
+    	mogrify -fill '#000000' -colorize 36% \
+    	-font "$font" -fill "$fontColor" -pointsize 48 -gravity center \
+    	-annotate +0+160 "$appendText" -channel RGBA -blur 0x0.5 -gravity center \
+    	"$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+    
+    fi
+  
+    composite -geometry +0+0 "$appendImage" -gravity center "$lockScreenBackdropDirectory/$lockScreenBackdropFileName" "$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+    
+  fi
+
+}
+
+
+lockScreen() {
+
+  lockCommand='i3lock -n'
+  hexColorIndicator='#'
+
+  backdrop="$1"
+  backdropText="$2"
+  font="$3"
+  fontColor="$4"
+  callback="$5"
+
+  if [ ! -z "$backdrop" ]
+  then
+  
+    case "$backdrop" in
+    
+      'screenshot') createBackdrop ;;
+      
+      "$hexColorIndicator"*)
+        backdrop="`corgiFetchSubstringAfter "$backdrop" "$hexColorIndicator"`"
+        lockCommand="$lockCommand -c $backdrop"
+        backdrop="$hexColorIndicator"
+      ;;
+      
+      *)
+      
+        if [ -f "$backdrop" ]
+        then 
+          lockScreenBackdropFile="$backdrop"
+        else
+  		    createBackdrop
+        fi      
+      
+      ;;
+    
+    esac
+    
+    if [ "$backdrop" != "$hexColorIndicator" ] && [ -f "$lockScreenBackdropFile" ]
+    then
+    	appendBackdrop "$backdropText" "$font" "$fontColor"
+      lockCommand="$lockCommand -i $lockScreenBackdropFile"
+    fi
+
+  fi
+
+  $lockCommand &
+  
+  if [ ! -z "$callback" ]
+  then
+    pgrep -f "$lockCommand" && $callback
+  fi
+  
+  exit $?
+
+}
