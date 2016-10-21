@@ -78,14 +78,14 @@ appendBackdrop() {
     then
     	
     	mogrify -fill '#000000' -colorize 33% \
-    	-filter Gaussian -resize 25% -define filter:sigma=1.25 -resize 400% \
+    	-filter Gaussian -resize 25% -define filter:sigma=1.0 -resize 400% \
     	-font "$font" -fill "$fontColor" -pointsize 48 -gravity center \
     	-annotate +0+160 "$appendText" -channel RGBA -blur 0x0.5 -gravity center \
     	"$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
     	
     else
     
-    	mogrify -fill '#000000' -colorize 36% \
+    	mogrify -fill '#000000' -colorize 33% \
     	-font "$font" -fill "$fontColor" -pointsize 48 -gravity center \
     	-annotate +0+160 "$appendText" -channel RGBA -blur 0x0.5 -gravity center \
     	"$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
