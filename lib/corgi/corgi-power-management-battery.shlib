@@ -171,6 +171,7 @@ pollBatteryStatusImpl() {
   while [ true ]
   do
   
+  	sleep $pollingFrequency
   	acPowerStatus=`upower -i $(upower -e | grep 'AC') | grep -E online|xargs|cut -d' ' -f2|sed s/%//`
   	
   	if [ "$acPowerStatus" = 'yes' ]
@@ -207,9 +208,7 @@ pollBatteryStatusImpl() {
       $thresholdActionCommand "$@"
     
    fi
-      
-    sleep $pollingFrequency
-  
+        
   done
   
   exit $?
