@@ -42,12 +42,12 @@ fi
 
 currentUser="`corgiFetchCurrentUserInfo 'name'`"
 lockScreenBackdropDirectory="/home/$currentUser/.tmp/corgi-screen-lock"
-lockScreenBackdropFileName="backdrop.png"
+lockScreenBackdropFileName="backdrop"
 lockScreenBackdropFile="$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
 
 createBackdrop() {
 
-  if [ $hasScrot = true ] && [ $hasMogrify = true ]
+  if [ $hasScrot = true ]
   then
 
     if [ ! -d "$lockScreenBackdropDirectory" ]
@@ -56,7 +56,7 @@ createBackdrop() {
     fi
 
     rm "$lockScreenBackdropDirectory"/*
-    scrot "$lockScreenBackdropFile"
+    scrot --quality 90 "$lockScreenBackdropFile".jpg
       
   fi
 
@@ -70,7 +70,7 @@ appendBackdrop() {
 
     appendImage="$parentDirectory/share/icons/corgi/common/lock-round-light.png"
 
-    appendText="$1"
+    appendedText="$1"
     font="$2"
     fontColor="$3"
       
@@ -80,19 +80,20 @@ appendBackdrop() {
     	mogrify -fill '#000000' -colorize 33% \
     	-filter Gaussian -resize 25% -define filter:sigma=1.0 -resize 400% \
     	-font "$font" -fill "$fontColor" -pointsize 48 -gravity center \
-    	-annotate +0+160 "$appendText" -channel RGBA -blur 0x0.5 -gravity center \
-    	"$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+    	-annotate +0+160 "$appendedText" -channel RGBA -blur 0x0.5 -gravity center \
+    	"$lockScreenBackdropFile".jpg
     	
     else
     
-    	mogrify -fill '#000000' -colorize 33% \
+    	mogrify -fill '#000000' -colorize 25% \
     	-font "$font" -fill "$fontColor" -pointsize 48 -gravity center \
-    	-annotate +0+160 "$appendText" -channel RGBA -blur 0x0.5 -gravity center \
-    	"$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+    	-annotate +0+160 "$appendedText" -channel RGBA -blur 0x0.15 -gravity center \
+    	"$lockScreenBackdropFile".jpg
     
     fi
   
-    composite -geometry +0+0 "$appendImage" -gravity center "$lockScreenBackdropDirectory/$lockScreenBackdropFileName" "$lockScreenBackdropDirectory/$lockScreenBackdropFileName"
+    composite -geometry +0+0 "$appendImage" -gravity center "$lockScreenBackdropFile".jpg "$lockScreenBackdropFile".jpg
+    mogrify -format png "$lockScreenBackdropFile".jpg
     
   fi
 
@@ -102,6 +103,7 @@ appendBackdrop() {
 lockScreen() {
 
   lockCommand='i3lock -n'
+  expectedArgCount=5
   hexColorIndicator='#'
 
   backdrop="$1"
@@ -136,19 +138,26 @@ lockScreen() {
     
     esac
     
-    if [ "$backdrop" != "$hexColorIndicator" ] && [ -f "$lockScreenBackdropFile" ]
+    if [ "$backdrop" != "$hexColorIndicator" ] && [ -f "$lockScreenBackdropFile".jpg ]
     then
     	appendBackdrop "$backdropText" "$font" "$fontColor"
-      lockCommand="$lockCommand -i $lockScreenBackdropFile"
+      lockCommand="$lockCommand -i $lockScreenBackdropFile".png
     fi
 
   fi
 
   $lockCommand &
   
-  if [ ! -z "$callback" ]
+  if [ $? -eq 0 ] && [ ! -z "$callback" ]
   then
-    pgrep -f "$lockCommand" && $callback
+  	
+    for idx in `seq 1 $expectedArgCount`
+    do
+      shift
+    done
+
+    pgrep -f "$lockCommand" && $callback "$@"
+
   fi
   
   exit $?
