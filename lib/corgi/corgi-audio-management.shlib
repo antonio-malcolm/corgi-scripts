@@ -49,20 +49,20 @@ setAudio() {
   audioHandler=amixer
 
   option="$1"
-  enforceAlsaOnly=$2
+  usePulseAudio=$2
 
   if [ "$option" = 'percent' ]
   then
 		
     percentage=$2
-    enforceAlsaOnly=$3
+    usePulseAudio=$3
 	
     if [ -z "$percentage" ]
     then
       percentage=25
     elif [ $percentage = true ] || [ $percentage = false ]
     then
-      enforceAlsaOnly=$percentage
+      usePulseAudio=$percentage
       percentage=25
     fi
 	  
@@ -78,15 +78,15 @@ setAudio() {
   
   if [ "$option" = 'mute' ]
   then
-  	enforceAlsaOnly=true	
+  	usePulseAudio=false	
   fi
 	
-	if [ -z "$enforceAlsaOnly" ] || [ $enforceAlsaOnly != true ]
+	if [ -z "$usePulseAudio" ] || [ $usePulseAudio != true ]
 	then
-	  enforceAlsaOnly=false	
+	  usePulseAudio=false	
   fi
 	
-  if [ $enforceAlsaOnly = false ] && [ $hasPulseAudio = true ]
+  if [ $usePulseAudio = true ] && [ $hasPulseAudio = true ]
   then
   	audioHandler="$audioHandler --device pulse"
   fi  	
