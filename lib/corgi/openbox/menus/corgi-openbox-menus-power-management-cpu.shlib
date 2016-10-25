@@ -868,7 +868,7 @@ buildCpusMenu() {
       coresMenu=''
       threadsMenu=''
       
-      processorId="`corgiFetchSubstringAfter "$line" ':' 'first'`"  
+      processorId="`corgiFetchSubstringAfter "$line" ':' 'first'`"
       processorId="`corgiTrimWhiteSpace "$processorId"`"
       
       # In the case of a multicore or multithreaded CPU, we will use the core or thread ID,
