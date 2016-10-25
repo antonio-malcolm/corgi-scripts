@@ -56,7 +56,7 @@ fi
 buildAudioLevelsMenu() {
 
   setAudioOutputLevelCommand="corgi-audio-control \"mute\""
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:Mute/Unmute" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setAudioOutputLevelItems="`corgiObMenuItem "label:Mute/Unmute" "action:Execute" "command:$setAudioOutputLevelCommand"`"
   
   setAudioOutputLevelCommand="corgi-audio-control \"up\""
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:Higher" "action:Execute" "command:$setAudioOutputLevelCommand"`"
