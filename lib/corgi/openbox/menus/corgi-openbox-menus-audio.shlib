@@ -67,29 +67,56 @@ buildAudioLevelsMenu() {
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 10"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:10%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
   
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 15"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:15%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 20"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:20%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 25"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:25%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
   
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 30"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:30%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
   
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 35"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:35%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 40"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:40%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 45"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:45%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
   
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 50"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:50%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
   
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 55"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:55%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 60"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:60%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 65"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:65%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
   
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 70"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:70%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
   
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 75"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:75%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 80"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:80%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
   
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 85"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:85%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 90"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:90%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  
+  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 95"
+  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:95%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
   
   setAudioOutputLevelCommand="corgi-audio-control \"percent\" 100"
   setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:100%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
