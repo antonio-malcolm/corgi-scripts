@@ -72,14 +72,15 @@ fi
 connectionDataDelimiter=','
 
 
-# Generates and echoes an Openbox menus (as an XML-formatted string) which permits the manipulation of display brightness.
+# Generates and echoes Openbox menus (as an XML-formatted string) which permits the manipulation of display brightness.
 #
 # $1 - string, required, the name of the interface which is used to set the display brightness
 buildConnectionBrightnessMenu() {
 
-  interface="$1"
+  name="$1"
+  interface="$2"
   
-  setBrightnessCommand="sudo corgi-display-brightness-control \"up\" \"$interface\"'"
+  setBrightnessCommand="sudo corgi-display-brightness-control \"up\" \"$interface\""
   setBrightnessItems="$setBrightnessItems`corgiObMenuItem "label:Higher" "action:Execute" "command:$setBrightnessCommand"`"
   
   setBrightnessCommand="sudo corgi-display-brightness-control \"down\" \"$interface\""
@@ -355,7 +356,7 @@ buildConnectionMenu() {
     
     if [ ! -z "$brightnessInterface" ]
     then
-      brightnessMenu="`buildConnectionBrightnessMenu \"$brightnessInterface\"`"
+      brightnessMenu="`buildConnectionBrightnessMenu \"$name\" \"$brightnessInterface\"`"
     fi
 
   fi
