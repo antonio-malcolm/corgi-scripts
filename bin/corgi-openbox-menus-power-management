@@ -12,36 +12,48 @@
 # See LICENSE.txt, for the specific language governing rights and limitations under the License,
 # which should have been provided with this software, or visit http://mozilla.org/MPL/2.0/.
 
-# corgi-openbox-menus-power-management - Generates an Openbox Pipemenu for describing and managing power management and throttling options for CPUs.
+# corgi-openbox-menus-power-management - Generates an Openbox Pipemenu for describing and managing power management
+#                                        and throttling options for various parts of the system.
 #
 # v2016.03.06
 #
 # Authored by Antonio Malcolm
 #
+# Requires: corgi-openbox-menus-power-management-battery.shlib
 # Requires: corgi-openbox-menus-power-management-cpu.shlib
-# Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-power-management-cpu.shlib)
-# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-power-management.shlib)
+# Requires: corgi-openbox-menus-core.shlib (normally provided by corgi-openbox-menus-power-management-battery.shlib or corgi-openbox-menus-power-management-cpu.shlib)
+# Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-power-management-battery.shlib or corgi-openbox-menus-power-management.shlib)
 
 exitStatus=1
 currentDirectory="`dirname "$0"`"
 currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
+corgiObPowerManagementBatteryLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-battery.shlib"
 corgiObPowerManagementCpuLib="$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib"
 
-if [ ! -e "$corgiObPowerManagementCpuLib" ]
+if [ ! -e "$corgiObPowerManagementBatteryLib" ]
 then
-  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Menu library is missing. Exiting..."
-  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Menu library is missing. Exiting..."
+  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Battery Menu library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement Battery Menu library is missing. Exiting..."
   exit $exitStatus
 fi
 
+if [ ! -e "$corgiObPowerManagementCpuLib" ]
+then
+  logger "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement CPU Menu library is missing. Exiting..."
+  echo "ERROR (corgi-openbox-menus-displays): The Corgi Openbox Power Mangement CPU Menu library is missing. Exiting..."
+  exit $exitStatus
+fi
+
+. "$corgiObPowerManagementBatteryLib"
 . "$corgiObPowerManagementCpuLib"
 
 pipeMenu=''
 
-cpuMenu="`buildCpusMenu`"
+batteriesMenu="`buildBatteriesDetailsMenu`"
+cpusMenu="`buildCpusMenu`"
 
-pipeMenu="`corgiObPipeMenu "content:$cpuMenu"`"
+pipeMenu="`corgiObPipeMenu "content:$cpusMenu$batteriesMenu"`"
 exitStatus=$?
 
 if [ -z "$pipeMenu" ]
