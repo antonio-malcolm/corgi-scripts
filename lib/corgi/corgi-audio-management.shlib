@@ -95,7 +95,7 @@ setAudio() {
 
     'up') $audioHandler 'sset' 'Master' '5%+' ;;
     'down') $audioHandler 'sset' 'Master' '5%-' ;;
-    'min') $audioHandler 'sset' 'Master' '25%' ;;
+    'min') $audioHandler 'sset' 'Master' '5%' ;;
     'max') $audioHandler 'sset' 'Master' '100%' ;;
     'percent') $audioHandler 'sset' 'Master' "$percentage%" ;;
 
