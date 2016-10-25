@@ -75,6 +75,36 @@ else
 fi
 
 
+getHighestPowerPercentageRemainingFromBatteries() {
+	
+	batteryDenotation='battery_'
+	
+  upower -e | grep $batteryDenotation | {
+  	
+  	batteryPowerPercentageRemaining=1000
+    	
+  	while read -r line
+   	do
+    	    	
+      batteryPowerPercentageRemainingForComparison=`upower -i "$line" | grep -E percentage|xargs|cut -d' ' -f2|sed s/%//`
+    	
+    	if [ $batteryPowerPercentageRemaining -eq 1000 ] || [ $batteryPowerPercentageRemaining -lt $batteryPowerPercentageRemainingForComparison ]
+    	then
+    	  batteryPowerPercentageRemaining=$batteryPowerPercentageRemainingForComparison
+    	fi
+    	
+    done
+     
+    echo $batteryPowerPercentageRemaining
+    exit $?
+    	
+  }
+ 
+  exit $?
+	
+}
+
+
 # NOTE: This is the IMPLEMENTATION method. You probably want to call #pollBatteryStatus(),
 # which implements this method, with job control (&), to place it in the background.
 #
@@ -92,13 +122,12 @@ fi
 # $3 - number, optional, the percentage threshold, at which the specified action or command should occur -
 #      defaults to 10 (user alert occurs at 10% higher than this threshold)
 pollBatteryStatusImpl() {
+	
+	expectedArgCount=3
 
   pollingFrequency=$1
-  shift
-  thresholdActionPercentage=$1
-  shift
-  thresholdAction="$1"
-  shift
+  thresholdActionPercentage=$2
+  thresholdAction="$3"
   
   # Default polling to every 30 seconds...
   if [ -z "$pollingFrequency" ]
@@ -159,9 +188,16 @@ pollBatteryStatusImpl() {
     ;;
     
     *)
+    
+      for idx in `seq 1 $expectedArgCount`
+      do
+        shift
+      done    
+    
       thresholdActionCommand="$thresholdAction"
       thresholdActionMessage="Executing specified command:\n`corgiReplaceAllOccurrencesOfSubstring \"$thresholdAction\" '&' '&amp;'`"
       thresholdWarningMessage="The machine will execute specified command:\n`corgiReplaceAllOccurrencesOfSubstring \"$thresholdAction\" '&' '&amp;'`"
+
     ;;
   
   esac
@@ -178,13 +214,13 @@ pollBatteryStatusImpl() {
   	then
   	  continue
   	fi
-  
-    batteryPercentageRemaining=`upower -i $(upower -e | grep 'BAT') | grep -E percentage|xargs|cut -d' ' -f2|sed s/%//`
+ 
+    batteryPowerPercentageRemaining=`getHighestPowerPercentageRemainingFromBatteries`
 
-    if [ $batteryPercentageRemaining -le $thresholdWarningPercentage ] && [ $hasServedThresholdWarning = false ]
+    if [ $batteryPowerPercentageRemaining -le $thresholdWarningPercentage ] && [ $hasServedThresholdWarning = false ]
     then
 
-      thresholdWarningMessage="Battery percentage remaining is $batteryPercentageRemaining%!\n$thresholdWarningMessage\nwhen percentage remaining reaches $thresholdActionPercentage%"
+      thresholdWarningMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%!\n$thresholdWarningMessage\nwhen percentage remaining reaches $thresholdActionPercentage%"
 
       if [ $hasZenity = true ]
       then
@@ -197,10 +233,10 @@ pollBatteryStatusImpl() {
     
     fi
 
-    if [ $batteryPercentageRemaining -le $thresholdActionPercentage ]
+    if [ $batteryPowerPercentageRemaining -le $thresholdActionPercentage ]
     then
 
-    	thresholdActionMessage="Battery percentage remaining is $batteryPercentageRemaining%. $thresholdActionMessage"
+    	thresholdActionMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%. $thresholdActionMessage"
     	hasServedThresholdWarning=false
     	
       logger "INFO (corgi-power-management-battery.shlib): $thresholdActionMessage"
