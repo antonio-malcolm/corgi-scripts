@@ -29,7 +29,6 @@ currentDirectory="`cd "$currentDirectory" ; pwd -P `"
 parentDirectory="`dirname $currentDirectory`"
 
 corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
-corgiPowerManagementBatteryLib="$parentDirectory/lib/corgi/corgi-power-management-battery.shlib"
 
 if [ ! -e "$corgiObMenuLib" ]
 then
@@ -65,7 +64,10 @@ buildBatteryDetailMenuItems() {
             'vendor') label='Vendor' ;;
             'model') label='Model' ;;
             'state') label='State' ;;
-            'energy') label='Power' ;;
+            'energy') label='Current Energy' ;;
+            'energy-full') label='Current Energy Capacity' ;;
+            'energy-full-design') label='Orig. Energy Capacity' ;;
+            'energy-rate') label='Current Energy Rate' ;;
             'time to empty') label='Time Remaining' ;;
             'time to full') label='Charge Time Remaining' ;;
             'percentage') label='Power Remaining' ;;
@@ -82,6 +84,12 @@ buildBatteryDetailMenuItems() {
             if [ -z "$value" ]
             then
               value='--'
+            else
+            	
+            	case "$value" in
+            		'fully-charged') value='fully charged' ;;
+            	esac
+            	
             fi
             
             batteryDetailMenuItems="$batteryDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
