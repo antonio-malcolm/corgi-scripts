@@ -419,7 +419,7 @@ buildSambaHostMenus() {
 
 		if [ -z "$hostMenus" ]
 		then
-			hostMenus="`corgiObMenuItem "label:No hosts responding.."`"
+			hostMenus="`corgiObMenuItem "label:No hosts responding."`"
 		fi
 		
 		hostPipeMenus="`corgiObPipeMenu "content:$hostMenus"`"
