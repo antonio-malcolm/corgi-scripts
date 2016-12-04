@@ -15,7 +15,7 @@
 # corgi-openbox-menus-network.shlib - Functions used to generate Openbox menus and items for describing and managing network devices and connections, 
 # using NetworkManager as a backend.
 #
-# v2015.07.17
+# v2016.12.04
 #
 # Authored by Antonio Malcolm
 #
@@ -200,6 +200,7 @@ buildWifiNetworkMenu() {
 
   else
     wifiNetworkMenuIcon="$parentDirectory/share/icons/corgi/openbox/menus/network/wifi-status-connected.png"
+    wifiNetworkMenuLabel="$wifiNetworkMenuLabel (connected)"    
   fi
 
   wifiNetworkDetailItems="`corgiObMenuItem "label:$mode"`"
@@ -237,16 +238,8 @@ buildWifiNetworkMenu() {
 
   if [ ! -e "$wifiNetworkMenuIcon" ]
   then
-
     wifiNetworkMenuLabel="$signalStrength%  $wifiNetworkMenuLabel"
-
-    if [ $isConnected = true ]
-    then
-      wifiNetworkMenuLabel="(CONNECTED) $wifiNetworkMenuLabel"
-    fi
-
     wifiNetworkMenu=`corgiObMenu "id:$menuId" "label:$wifiNetworkMenuLabel" "content:$wifiNetworkMenuContent"`
-
   else
     wifiNetworkMenu=`corgiObMenu "id:$menuId" "icon:$wifiNetworkMenuIcon" "label:$wifiNetworkMenuLabel" "content:$wifiNetworkMenuContent"`
   fi
@@ -273,6 +266,7 @@ buildWifiNetworkMenus() {
   nmcli device wifi list | {
 
     wifiNetworkMenus=''
+    wifiNetworkConnectedMenu=''
     count=0
 
     while read -r line
@@ -287,16 +281,25 @@ buildWifiNetworkMenus() {
 
         if corgiStartsWithSubstring "$line" '*'
         then
+        	
           args="${line#** }"
           args="(CONNECTED) $args"
           visibility="`getWifiNetworkVisibility true $args`"
+        
+          if [ "$visibility" = "$requestVisibility" ]
+          then
+            wifiNetworkConnectedMenu="`buildWifiNetworkMenu $args`"
+          fi         
+        
         else
+        	
           visibility="`getWifiNetworkVisibility false $args`"
-        fi
-
-        if [ "$visibility" = "$requestVisibility" ]
-        then
-          wifiNetworkMenus="$wifiNetworkMenus`buildWifiNetworkMenu $args`"
+        
+          if [ "$visibility" = "$requestVisibility" ]
+          then
+            wifiNetworkMenus="$wifiNetworkMenus`buildWifiNetworkMenu $args`"
+          fi       
+      
         fi
 
       fi
@@ -305,7 +308,7 @@ buildWifiNetworkMenus() {
 
     done
 
-    echo "$wifiNetworkMenus"
+    echo "$wifiNetworkConnectedMenu$wifiNetworkMenus"
     exit 0
     
   }

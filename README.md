@@ -1,4 +1,4 @@
-**Thanks for downloading Corgi Scripts (v2016.10.25)!**
+**Thanks for downloading Corgi Scripts (v2016.12.04)!**
 
 Corgi Scripts is a library of executable shell scripts, reusable shell functions, and Openbox pipemenus.  
 It is authored with a focus on portability, reusability, and POSIX compliance.  
@@ -88,16 +88,16 @@ For corgi-audio-management.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
-| alsa       | for which the lib and executable provide an interface and manage audio stuffs                                      |
+| alsa       | for which the lib and executable provide an interface and manage audio stuffs                         |
 | pulseaudio | (optional) if you're using pulseaudio with alsa                                                       |
-| alsa-plugins-pulseaudio | (optional) if you're using pulseaudio with alsa                                                       | 
+| alsa-plugins-pulseaudio | (optional) if you're using pulseaudio with alsa                                          | 
 
 
 For corgi-displays-management.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
-| xrandr     | for which the lib and executable provide an interface and manage screen and display stuffs              |
+| xrandr     | for which the lib and executable provide an interface and manage screen and display stuffs            |
 | lspci      | for obtaining information which describes graphics rendering hardware (such as GPUs)                  |  
 
 
@@ -105,7 +105,7 @@ For corgi-network-management.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
-| NetworkManager         | for which the lib and executable provide an interface and manage networking stuffs          |
+| NetworkManager         | for which the lib and executable provide an interface and manage networking stuffs        |
 | nm-connection-editor   | provides the interface for editing connection profiles (sometimes packaged with network-manager-applet, though the applet package, itself, is not used by corgi) |
 
 
@@ -113,14 +113,14 @@ For corgi-power-managment-battery.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
-| upower     | for which the lib and executable provide an interface and report the current battery state              |
+| upower     | for which the lib and executable provide an interface and report the current battery state            |
 
 
 For corgi-power-managment-cpu.shlib:
 
 | Package    | Requirement                                                                                           |
 |------------|-------------------------------------------------------------------------------------------------------|
-| cpupower   | for which the lib and executable provide an interface and manage cpu throttling and power management    |
+| cpupower   | for which the lib and executable provide an interface and manage cpu throttling and power management  |
 | gksudo     | provides an interface for obtaining the user's sudo password when setting cpu throttling and power managament options |
 
 
