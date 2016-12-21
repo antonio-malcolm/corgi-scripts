@@ -32,7 +32,7 @@ You may simply call them directly, or, in the case of Openbox pipmenu executable
 
 ```
 <menu id="network" label="Network" execute="corgi-openbox-menus-networkmanager" />
-<menu id="network" label="Samba" execute="corgi-openbox-menus-samba" />
+<menu id="samba" label="Samba" execute="corgi-openbox-menus-samba" />
 ```
 
 Currently, there are two executables which require root permissions:
