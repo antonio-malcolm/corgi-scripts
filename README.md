@@ -37,8 +37,9 @@ You may simply call them directly, or, in the case of Openbox pipmenu executable
 
 Currently, there are two executables which require root permissions:
 
-`corgi-display-brightness-control`
-`corgi-openbox-menus-power-management` (permissions required ONLY if you need to get/set cpu performance bias)
+`corgi-display-brightness-control`  
+`corgi-openbox-menus-power-management`  
+(permissions for power management required ONLY if you need to get/set cpu performance bias)
 
 As Openbox does not prompt for a password when rendering menus,  
 and `corgi-openbox-menus-power-management` is responsible for generating a pipemenu,  
