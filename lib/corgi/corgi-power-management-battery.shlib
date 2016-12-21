@@ -77,7 +77,7 @@ fi
 
 getHighestPowerPercentageRemainingFromBatteries() {
 	
-	batteryDenotation='battery_'
+  batteryDenotation='battery_'
 	
   upower -e | grep $batteryDenotation | {
   	
@@ -123,7 +123,7 @@ getHighestPowerPercentageRemainingFromBatteries() {
 #      defaults to 10 (user alert occurs at 10% higher than this threshold)
 pollBatteryStatusImpl() {
 	
-	expectedArgCount=3
+  expectedArgCount=3
 
   pollingFrequency=$1
   thresholdActionPercentage=$2
