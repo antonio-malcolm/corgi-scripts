@@ -232,31 +232,79 @@ getCpuFrequencyInfo() {
     
     while read -r line
     do
+    	
       # Speeds are on the last line, and there are, normally, only two lines...
-      response="$line"  
+      if [ ! -z "$line" ]
+      then
+      	# We must compensate for cpupower v4.9's new, assinine, more verbose output...
+      	response="$response $line"
+      fi
+          
     done
     
-    governor=''
+    if [ ! -z "$response" ]
+    then    
+
+      governor=''
+      response="`corgiFetchSubstringAfter "$response" ':'`"
+      
+      if `corgiHasSubstring "$response" 'GHz'`
+      then
+      	
+      	# We must compensate for cpupower v4.9's new, assinine, more verbose output...
+      	
+        if [ "$frequencyInfoOption" = '--policy' ]
+        then
+        	
+          governor="$dataDelimiter`corgiFetchSubstringBetween "$response" 'governor' 'may'`"
+          governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" '"'`"
+          governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" ' '`"
+          governor="`corgiTrimWhiteSpace "$governor"`"
+
+          response="`corgiFetchSubstringBetween "$response" 'frequency should be within' 'The governor'`"
+          response="`corgiReplaceAllOccurrencesOfSubstring "$response" 'and' '-'`"
+
+        fi      	
+      	
+      	response="`corgiRemoveAllOccurrencesOfSubstring "$response" 'GHz'`"
+      	response="`corgiRemoveAllOccurrencesOfSubstring "$response" '.'`"
+      	
+      	minSpeed="`corgiFetchSubstringBefore "$response" '-'`"
+      	minSpeed="`corgiTrimWhiteSpace "$minSpeed"`"
+      	minSpeed="`corgiPadString "$minSpeed" '0' 4`"
+      	
+      	maxSpeed="`corgiFetchSubstringAfter "$response" '-'`"
+      	maxSpeed="`corgiTrimWhiteSpace "$maxSpeed"`"
+      	maxSpeed="`corgiPadString "$maxSpeed" '0' 4`"
+      	
+      else
+      	
+        if [ "$frequencyInfoOption" = '--policy' ]
+        then
+          governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
+          response="`corgiFetchSubstringBefore "$response" ' '`"
+        fi      	
+      	
+        minSpeed="`corgiFetchSubstringBefore "$response" ' '`"
+        speedPrefix="`corgiTrimStringByLength "$minSpeed" 3`"
+        speedSuffix="`corgiFetchSubstringAfter "$minSpeed" "$speedPrefix"`"
+        speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
+        minSpeed="$speedPrefix.$speedSuffix"
     
-    if [ "$frequencyInfoOption" = '--policy' ]
-    then
-      governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
-      response="`corgiFetchSubstringBefore "$response" ' '`"
+        maxSpeed="`corgiFetchSubstringAfter "$response" ' '`"
+        speedPrefix="`corgiTrimStringByLength "$maxSpeed" 3`"
+        speedSuffix="`corgiFetchSubstringAfter "$maxSpeed" "$speedPrefix"`"
+        speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
+        maxSpeed="$speedPrefix.$speedSuffix"      		
+      	
+      fi
+    
+      echo "$minSpeed$dataDelimiter$maxSpeed$governor"
+      
+    else
+      echo ""
     fi
-    
-    minSpeed="`corgiFetchSubstringBefore "$response" ' '`"
-    speedPrefix="`corgiTrimStringByLength "$minSpeed" 3`"
-    speedSuffix="`corgiFetchSubstringAfter "$minSpeed" "$speedPrefix"`"
-    speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
-    minSpeed="$speedPrefix.$speedSuffix"
-    
-    maxSpeed="`corgiFetchSubstringAfter "$response" ' '`"
-    speedPrefix="`corgiTrimStringByLength "$maxSpeed" 3`"
-    speedSuffix="`corgiFetchSubstringAfter "$maxSpeed" "$speedPrefix"`"
-    speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
-    maxSpeed="$speedPrefix.$speedSuffix"
-    
-    echo "$minSpeed$dataDelimiter$maxSpeed$governor"
+      
     exit 0
     
   }
