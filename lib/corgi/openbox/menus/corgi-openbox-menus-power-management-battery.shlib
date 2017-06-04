@@ -15,7 +15,7 @@
 # corgi-openbox-menus-power-management-battery.shlib - Functions used to generate Openbox menus and items
 #                                                      which describe the current state of batteries, using upower as a backend.
 #
-# v2016.10.25
+# v2017.06.04
 #
 # Authored by Antonio Malcolm
 #
@@ -44,64 +44,73 @@ then
   exit 1
 fi
 
-buildBatteryDetailMenuItems() {
+buildBatteryNameWithDetailMenuItems() {
 
   batteryDetailMenuItems=''
 
   batteryId="$1"
    
-      upower -i "$batteryId" | {
+    upower -i "$batteryId" | {
       
-        while read -r line
-        do
+      name=''
+      
+      while read -r line
+      do
         
-        	fieldId="`corgiFetchSubstringBefore "$line" ':' 'first'`"
-          fieldId="`corgiTrimWhiteSpace "$fieldId"`"
+        fieldId="`corgiFetchSubstringBefore "$line" ':' 'first'`"
+        fieldId="`corgiTrimWhiteSpace "$fieldId"`"
           
-          label=''
+        label=''
          
-          case "$fieldId" in
-            'vendor') label='Vendor' ;;
-            'model') label='Model' ;;
-            'state') label='State' ;;
-            'energy') label='Current Energy' ;;
-            'energy-full') label='Current Energy Capacity' ;;
-            'energy-full-design') label='Orig. Energy Capacity' ;;
-            'energy-rate') label='Current Energy Rate' ;;
-            'time to empty') label='Time Remaining' ;;
-            'time to full') label='Charge Time Remaining' ;;
-            'percentage') label='Power Remaining' ;;
-            'capacity') label='Capacity Remaining' ;;
-            'technology') label='Cell Type' ;;
-          esac          
+        case "$fieldId" in
+        	
+          'vendor') label='Vendor' ;;
+          'model') label='Model' ;;
+          'state') label='State' ;;
+          'energy') label='Current Energy' ;;
+          'energy-full') label='Current Energy Capacity' ;;
+          'energy-full-design') label='Orig. Energy Capacity' ;;
+          'energy-rate') label='Current Energy Rate' ;;
+          'time to empty') label='Time Remaining' ;;
+          'time to full') label='Charge Time Remaining' ;;
+          'percentage') label='Power Remaining' ;;
+          'capacity') label='Capacity Remaining' ;;
+          'technology') label='Cell Type' ;;
           
-          if [ ! -z "$label" ]
+          'native-path')
+            name="`corgiFetchSubstringAfter "$line" ':' 'first'`"
+            name="`corgiTrimWhiteSpace "$name"`"
+          ;;          
+          
+        esac          
+          
+        if [ ! -z "$label" ]
+        then
+
+       	  value="`corgiFetchSubstringAfter "$line" ':' 'first'`"
+          value="`corgiTrimWhiteSpace "$value"`"
+            
+          if [ -z "$value" ]
           then
-
-        	  value="`corgiFetchSubstringAfter "$line" ':' 'first'`"
-            value="`corgiTrimWhiteSpace "$value"`"
-            
-            if [ -z "$value" ]
-            then
-              value='--'
-            else
+            value='--'
+          else
             	
-            	case "$value" in
-            		'fully-charged') value='fully charged' ;;
-            	esac
+            case "$value" in
+          	  'fully-charged') value='fully charged' ;;
+            esac
             	
-            fi
+          fi
             
-            batteryDetailMenuItems="$batteryDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
+          batteryDetailMenuItems="$batteryDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
 
-          fi          
+        fi          
         
-        done
+      done
         
-        echo "$batteryDetailMenuItems"
-        exit $?
+      echo "$name:$batteryDetailMenuItems"
+      exit $?
       
-      }
+    }
       
   exit $?
 
@@ -117,14 +126,16 @@ buildBatteriesDetailsMenu() {
   
     while read -r line
     do
-    
-      batteryName="`corgiFetchSubstringAfter "$line" "$batteryDenotation" 'last'`"
-      batteryDetailMenuItems="`buildBatteryDetailMenuItems "$line"`"
+    	
+      batteryNameWithDetailMenuItems="`buildBatteryNameWithDetailMenuItems "$line"`"
+      batteryName="`corgiFetchSubstringBefore "$batteryNameWithDetailMenuItems" ':' 'first'`"
+      batteryName="`corgiObEscapeUnderscores "$batteryName"`"
+      batteryDetailMenuItems="$batteryNameWithDetailMenuItems"
 
       if [ ! -z "$batteryDetailMenuItems" ]
       then
         menuId="`corgiMakeIdString "corgi-menus-power-management-battery-details-$batteryName-"`"
-        batteryDetailsMenus="$batteryDetailsMenus`corgiObMenu "id:$menuId" "label:$batteryName" "content:$batteryDetailMenuItems"`"       
+        batteryDetailsMenus="$batteryDetailsMenus`corgiObMenu "id:$menuId" "label:$batteryName" "content:$batteryDetailMenuItems"`"      
       fi
     
     done

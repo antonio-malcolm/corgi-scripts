@@ -16,7 +16,7 @@
 #                                        automatically sleep or hibernate the host when a specified minimum percentage
 #                                        of battery power remaining is reached.
 #
-# v2016.10.21
+# v2017.06.04
 #
 # Authored by Antonio Malcolm
 #
@@ -77,21 +77,19 @@ fi
 
 getHighestPowerPercentageRemainingFromBatteries() {
 	
-  batteryDenotation='battery_'
-	
-  upower -e | grep $batteryDenotation | {
+  upower -e | grep 'battery' | {
   	
-  	batteryPowerPercentageRemaining=1000
+  	batteryPowerPercentageRemaining=0
     	
   	while read -r line
    	do
     	    	
       batteryPowerPercentageRemainingForComparison=`upower -i "$line" | grep -E percentage|xargs|cut -d' ' -f2|sed s/%//`
     	
-    	if [ $batteryPowerPercentageRemaining -eq 1000 ] || [ $batteryPowerPercentageRemaining -lt $batteryPowerPercentageRemainingForComparison ]
-    	then
-    	  batteryPowerPercentageRemaining=$batteryPowerPercentageRemainingForComparison
-    	fi
+      if [ $batteryPowerPercentageRemainingForComparison -ge $batteryPowerPercentageRemaining ]
+      then
+        batteryPowerPercentageRemaining=$batteryPowerPercentageRemainingForComparison
+      fi
     	
     done
      
@@ -236,8 +234,8 @@ pollBatteryStatusImpl() {
     if [ $batteryPowerPercentageRemaining -le $thresholdActionPercentage ]
     then
 
-    	thresholdActionMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%. $thresholdActionMessage"
-    	hasServedThresholdWarning=false
+      thresholdActionMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%. $thresholdActionMessage"
+      hasServedThresholdWarning=false
     	
       logger "INFO (corgi-power-management-battery.shlib): $thresholdActionMessage"
      

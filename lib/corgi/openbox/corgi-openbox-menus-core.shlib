@@ -15,7 +15,7 @@
 # corgi-openbox-menus-core.shlib - The core library of functions for, and shared by, Corgi shell-based utilites used to generate Openbox pipemenus.
 # These functions can also be used by any script which sources this file.
 #
-# v2015.06.17
+# v2017.06.04
 #
 # Authored by Antonio Malcolm
 #
@@ -277,6 +277,9 @@ corgiObEscapeUnderscores() {
 
     prefix="`corgiFetchSubstringBefore "$resultString" '_' 'first'`"
     appendix="`corgiFetchSubstringAfter "$resultString" '_' 'first'`"
+    
+    prefix="`corgiObEscapeUnderscores "$prefix"`"
+    appendix="`corgiObEscapeUnderscores "$appendix"`"
 
     resultString="$prefix"'__'"$appendix"
 
