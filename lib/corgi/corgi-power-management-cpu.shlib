@@ -15,7 +15,7 @@
 # corgi-power-management-cpu.shlib - Functions used to describe and manage power management and throttling options for CPUs, 
 #                                                  using /proc/cpuinfo and cpupower as backends.
 #
-# v2016.07.17
+# v2017.06.04
 #
 # Authored by Antonio Malcolm
 #
@@ -246,61 +246,62 @@ getCpuFrequencyInfo() {
     then    
 
       governor=''
-      response="`corgiFetchSubstringAfter "$response" ':'`"
+      response="`corgiFetchSubstringAfter "$response" ':'`"   
       
-      if `corgiHasSubstring "$response" 'GHz'`
-      then
-      	
-      	# We must compensate for cpupower v4.9's new, assinine, more verbose output...
+      	# GHz notation was introduced with cpupower v4.9,
+      	# along with more verbose output...
       	
         if [ "$frequencyInfoOption" = '--policy' ]
         then
-        	
-          governor="$dataDelimiter`corgiFetchSubstringBetween "$response" 'governor' 'may'`"
-          governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" '"'`"
-          governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" ' '`"
-          governor="`corgiTrimWhiteSpace "$governor"`"
 
-          response="`corgiFetchSubstringBetween "$response" 'frequency should be within' 'The governor'`"
-          response="`corgiReplaceAllOccurrencesOfSubstring "$response" 'and' '-'`"
+          if corgiHasSubstring "$response" 'frequency should be within'
+          then
+          	
+            governor="$dataDelimiter`corgiFetchSubstringBetween "$response" 'governor' 'may'`"
+            governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" '"'`"
+            governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" ' '`"
+            governor="`corgiTrimWhiteSpace "$governor"`"
 
-        fi      	
-      	
-      	response="`corgiRemoveAllOccurrencesOfSubstring "$response" 'GHz'`"
+            response="`corgiFetchSubstringBetween "$response" 'frequency should be within' 'The governor'`"
+            response="`corgiReplaceAllOccurrencesOfSubstring "$response" 'and' '-'`"
+          
+          else
+            governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
+            response="`corgiFetchSubstringBefore "$response" ' '`"
+          fi            
+
+        fi       
+      
       	response="`corgiRemoveAllOccurrencesOfSubstring "$response" '.'`"
       	
       	minSpeed="`corgiFetchSubstringBefore "$response" '-'`"
-      	minSpeed="`corgiTrimWhiteSpace "$minSpeed"`"
-      	minSpeed="`corgiPadString "$minSpeed" '0' 4`"
+      	minSpeed="`corgiRemoveAllOccurrencesOfSubstring "$minSpeed" ' '`"
+      	
+      	if corgiEndsWithSubstring "$minSpeed" 'GHz'
+      	then
+      	
+      	  minSpeed="`corgiRemoveAllOccurrencesOfSubstring "$minSpeed" 'GHz'`"
+      	  minSpeed="`corgiPadString "$minSpeed" '0' 4`"
+      	
+        elif corgiEndsWithSubstring "$minSpeed" 'MHz'
+        then
+      	  minSpeed="`corgiRemoveAllOccurrencesOfSubstring "$minSpeed" 'MHz'`"
+      	fi
       	
       	maxSpeed="`corgiFetchSubstringAfter "$response" '-'`"
-      	maxSpeed="`corgiTrimWhiteSpace "$maxSpeed"`"
-      	maxSpeed="`corgiPadString "$maxSpeed" '0' 4`"
+      	maxSpeed="`corgiRemoveAllOccurrencesOfSubstring "$maxSpeed" ' '`"
       	
-      else
-      	
-        if [ "$frequencyInfoOption" = '--policy' ]
-        then
-          governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
-          response="`corgiFetchSubstringBefore "$response" ' '`"
-        fi      	
-      	
-        minSpeed="`corgiFetchSubstringBefore "$response" ' '`"
-        speedPrefix="`corgiTrimStringByLength "$minSpeed" 3`"
-        speedSuffix="`corgiFetchSubstringAfter "$minSpeed" "$speedPrefix"`"
-        speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
-        minSpeed="$speedPrefix.$speedSuffix"
-    
-        maxSpeed="`corgiFetchSubstringAfter "$response" ' '`"
-        speedPrefix="`corgiTrimStringByLength "$maxSpeed" 3`"
-        speedSuffix="`corgiFetchSubstringAfter "$maxSpeed" "$speedPrefix"`"
-        speedSuffix="`corgiTrimStringByLength "$speedSuffix" 1`"
-        maxSpeed="$speedPrefix.$speedSuffix"      		
-      	
-      fi
+      	if corgiEndsWithSubstring "$maxSpeed" 'GHz'
+      	then
+      	  maxSpeed="`corgiRemoveAllOccurrencesOfSubstring "$maxSpeed" 'GHz'`"
+      	  maxSpeed="`corgiPadString "$maxSpeed" '0' 4`"
+      	elif corgiEndsWithSubstring "$maxSpeed" 'MHz'
+      	then
+      	  maxSpeed="`corgiRemoveAllOccurrencesOfSubstring "$maxSpeed" 'MHz'`"
+      	fi
     
       echo "$minSpeed$dataDelimiter$maxSpeed$governor"
-      
+ 
     else
       echo ""
     fi
@@ -616,16 +617,16 @@ setSpeedOnCpus() {
   if [ $hasErrors = true ]
   then
     
-  	response="Failed to set frequency, for"
-  	
+    response=''
+
     if corgiHasSubstring "$processorIds" $dataDelimiter
-    then
-   	  response="$response $messagePrefix"'s '	
-    else
-      response="$response $messagePrefix"
+    then 	
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
     fi
-    
-    response=" $processorIds, $messageSuffix"
+   
+    response="Failed to set frequency, for $messagePrefix$response: $messageSuffix"
   	
     if [ $hasNotify = true ]
     then
@@ -644,7 +645,7 @@ setSpeedOnCpus() {
 
   authenticationMessage="Setting the CPU freqeuncy requires an Administrator's password."
 
-  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
+  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" && {
     
     if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
     then
@@ -785,9 +786,35 @@ setSpeedOnCpus() {
     
     exit 0
         
-  }  
+  }
+ 
+  gksudoStatus=$?
   
-  exit $?
+  if [ $gksudoStatus != 0 ]
+  then
+
+  	response=''
+ 
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then 	
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi	
+  	
+  	response="Failed to set frequency, for $messagePrefix$response, due to an authentication error"
+  	
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi 	
+  	
+  fi 
+  
+  exit gksudoStatus
   
 }
 
@@ -816,6 +843,9 @@ setGovernorOnCpus() {
   
   governors="`cpupower --cpu "$processorIds" frequency-info | grep 'governors:'`"
   governors="`corgiFetchSubstringAfter "$governors" 'governors:'`$dataDelimiter"
+  governors="`corgiTrimWhiteSpace "$governors"`"
+  governors="`corgiReplaceAllOccurrencesOfSubstring "$governors" ' ' $dataDelimiter`"
+  
   desiredGovernorMatchesAvailableGovernor=false
   
   while corgiHasSubstring "$governors" $dataDelimiter
@@ -823,7 +853,7 @@ setGovernorOnCpus() {
     
     governor="`corgiFetchSubstringBefore "$governors" $dataDelimiter 'first'`"
     governor="`corgiTrimWhiteSpace "$governor"`"
-    
+
     if [ "$desiredGovernor" = "$governor" ]
     then
       desiredGovernorMatchesAvailableGovernor=true      
@@ -832,20 +862,25 @@ setGovernorOnCpus() {
     governors="`corgiFetchSubstringAfter "$governors" $dataDelimiter 'first'`"
     
   done
+ 
+  if corgiEndsWithSubstring "$processorIds" $dataDelimiter
+  then
+    processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+  fi 
   
   if [ $desiredGovernorMatchesAvailableGovernor = false ]
   then
   	
-  	response="Failed to set governor, for"
-  	
+  	response=''
+ 
     if corgiHasSubstring "$processorIds" $dataDelimiter
-    then
-   	  response="$response $messagePrefix"'s '	
-    else
-      response="$response $messagePrefix"
-    fi
-    
-    response=" $processorIds, \"$desiredGovernor\" is not an available option"
+    then 	
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi	
+  	
+  	response="Failed to set governor, for $messagePrefix$response: \"$desiredGovernor\" is not an available option"
   	
     if [ $hasNotify = true ]
     then
@@ -861,16 +896,11 @@ setGovernorOnCpus() {
     exit 1  
 
   fi
-  
-  if corgiEndsWithSubstring "$processorIds" $dataDelimiter
-  then
-    processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
-  fi
     
   cpuFrequencySetCommand="cpupower --cpu $processorIds frequency-set --governor $desiredGovernor"
   authenticationMessage="Setting the CPU governor requires an Administrator's password."
 
-  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
+  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" && {
     
     if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
     then
@@ -927,22 +957,22 @@ setGovernorOnCpus() {
       fi
       
       response="$response, governor now set to $desiredGovernor"
-      
+     
       if [ $hasNotify = true ]
       then
         notify-send --urgency="normal" "$response"
       elif [ $hasZenity = true ]
       then
         zenity --info --title="Success" --text="$response"
-      fi     
-    
+      fi
+   
     fi
     
     if [ $hasErrors = true ]
     then
       
       response="Failed to set governor, to $desiredGovernor, for $messagePrefix"
-      
+      	
       if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
       then
         response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
@@ -958,18 +988,44 @@ setGovernorOnCpus() {
       elif [ $hasZenity = true ]
       then
         zenity --error --title="Failure" --text="$response"
-      fi       
+      fi
+     
+    fi 
       
-      echo "ERROR (corgi-power-management-cpu.shlib): $response"
-      logger "ERROR (corgi-power-management-cpu.shlib): $response"
-  
-    fi
+    echo "ERROR (corgi-power-management-cpu.shlib): $response"
+    logger "ERROR (corgi-power-management-cpu.shlib): $response"
     
     exit 0  
     
   }
+ 
+  gksudoStatus=$?
   
-  exit $?
+  if [ $gksudoStatus != 0 ]
+  then
+
+  	response=''
+ 
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then 	
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi	
+  	
+  	response="Failed to set governor, for $messagePrefix$response, due to an authentication error"
+  	
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi 	
+  	
+  fi
+  
+  exit gksudoStatus
   
 }
 
@@ -999,16 +1055,16 @@ setPerfBiasOnCpus() {
   if [ $desiredPerfBias -lt 0 ] || [ $desiredPerfBias -gt 15 ]
   then
   	
-  	response="Failed to set performance bias, for"
-  	
+   	response=''
+ 
     if corgiHasSubstring "$processorIds" $dataDelimiter
     then
-   	  response="$response $messagePrefix"'s '	
-    else
-      response="$response $messagePrefix"
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
     fi
-    
-    response=" $processorIds, $desiredPerfBias is outside the range of 0 to 15"
+  	
+  	response="Failed to set performance bias, for $messagePrefix$response: $desiredPerfBias is outside the range of 0 to 15"
   	
     if [ $hasNotify = true ]
     then
@@ -1033,7 +1089,7 @@ setPerfBiasOnCpus() {
   cpuFrequencySetCommand="cpupower --cpu $processorIds set --perf-bias $desiredPerfBias"
   authenticationMessage="Setting the CPU performance bias requires an Administrator's password."
 
-  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" ; {
+  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" && {
     
     if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
     then
@@ -1130,7 +1186,33 @@ setPerfBiasOnCpus() {
     exit 0  
     
   }
+ 
+  gksudoStatus=$?
   
-  exit $?
+  if [ $gksudoStatus != 0 ]
+  then
+
+  	response=''
+ 
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then 	
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi	
+  	
+  	response="Failed to set performance bias, for $messagePrefix$response, due to an authentication error"
+  	
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi 	
+  	
+  fi 
+  
+  exit gksudoStatus
   
 }

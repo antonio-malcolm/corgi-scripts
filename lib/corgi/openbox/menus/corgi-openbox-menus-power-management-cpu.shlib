@@ -15,7 +15,7 @@
 # corgi-openbox-menus-power-management-cpu.shlib - Functions used to generate Openbox menus and items which describe and manage power management and
 #                                                  throttling options for CPUs, using /proc/cpuinfo and cpupower as backends.
 #
-# v2015.07.17
+# v2017.06.04
 #
 # Authored by Antonio Malcolm
 #
@@ -97,6 +97,11 @@ buildCpuDetailMenuItem() {
       then
         value="`corgiObEscapeUnderscores "$value"`"
       fi
+     
+      if [ "$label" = 'Governors' ]
+      then
+        value="`corgiReplaceAllOccurrencesOfSubstring "$value" ' ' ', '`"
+      fi      
     
     fi
 
@@ -205,7 +210,7 @@ buildCpuDetailMenuItems() {
       
         cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
       
-      fi
+      fi     
       
       additionalDetailPairs="`corgiFetchSubstringAfter "$additionalDetailPairs" $dataDelimiter 'first'`"
           
@@ -278,7 +283,7 @@ buildCpuDetailsMenu() {
     cpuSettingsMenu="`corgiObMenu "id:$menuId" "label:Set" "content:$cpuSettingsMenus"`"
   
   fi
-  
+
   echo "`corgiObPipeMenu "content:$detailMenuItems$cpuSettingsMenu"`"
   exit $?
   
@@ -427,7 +432,7 @@ buildCpuSpeedOptionsMenuItemsBody() {
       desiredSpeed="`corgiDeriveNumberFromPercentage $speed $maxSpeed`"
       speed="$speed%"
     fi
-    
+
     if [ $desiredSpeed -ge $minSpeed ] && [ $desiredSpeed -le $maxSpeed ]
     then
 
@@ -513,7 +518,7 @@ buildCpuGovernorOptionsMenuItems() {
     do
     
       governors="`corgiFetchSubstringAfter "$line" 'governors:'`$dataDelimiter"
-      governors="`corgiTrimWhiteSpace "$governors"`"
+      governors="`corgiTrimWhiteSpace "$governors"`" 
 
       if [ -z "$governorsCheckedAcrossAllProcessorIds" ]
       then
@@ -575,6 +580,8 @@ buildCpuGovernorOptionsMenuItems() {
     then
       governorsSharedByAllProcessorIds="$governorsCheckedAcrossAllProcessorIds$dataDelimiter"
     fi
+    
+    governorsSharedByAllProcessorIds="`corgiReplaceAllOccurrencesOfSubstring "$governorsSharedByAllProcessorIds" ' ' $dataDelimiter`"
     
     while corgiHasSubstring "$governorsSharedByAllProcessorIds" $dataDelimiter
     do
@@ -718,7 +725,7 @@ buildCpuCoreMenu() {
               
     while corgiHasSubstring "$coreThreads" $dataDelimiter
     do
-                
+              
       threadId="`corgiFetchSubstringBefore "$coreThreads" $dataDelimiter 'first'`"
       threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$processorId-core-$coreId-threads-$threadId&quot; &quot;Thread&quot;'"              
   

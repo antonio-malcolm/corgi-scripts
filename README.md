@@ -1,4 +1,4 @@
-**Thanks for downloading Corgi Scripts (v2016.12.04)!**
+**Thanks for downloading Corgi Scripts (v2017.06.04)!**
 
 Corgi Scripts is a library of executable shell scripts, reusable shell functions, and Openbox pipemenus.  
 It is authored with a focus on portability, reusability, and POSIX compliance.  
