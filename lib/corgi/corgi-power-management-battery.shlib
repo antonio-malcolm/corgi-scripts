@@ -16,7 +16,7 @@
 #                                        automatically sleep or hibernate the host when a specified minimum percentage
 #                                        of battery power remaining is reached.
 #
-# v2017.06.04
+# v2017.06.05
 #
 # Authored by Antonio Malcolm
 #
@@ -200,13 +200,14 @@ pollBatteryStatusImpl() {
   
   esac
   
-  hasServedThresholdWarning=false
+  warningMessageHasBeenDelivered=false
   
   while [ true ]
   do
-  
-  	sleep $pollingFrequency
-  	acPowerStatus=`upower -i $(upower -e | grep 'AC') | grep -E online|xargs|cut -d' ' -f2|sed s/%//`
+
+  	acPowerStatus=`upower -i $(upower -e | grep 'AC\|line_power') | grep -E online|xargs|cut -d' ' -f2|sed s/%//`
+  	warningMessage=''
+    actionMessage=''
   	
   	if [ "$acPowerStatus" = 'yes' ]
   	then
@@ -215,33 +216,34 @@ pollBatteryStatusImpl() {
  
     batteryPowerPercentageRemaining=`getHighestPowerPercentageRemainingFromBatteries`
 
-    if [ $batteryPowerPercentageRemaining -le $thresholdWarningPercentage ] && [ $hasServedThresholdWarning = false ]
+    if [ $batteryPowerPercentageRemaining -le $thresholdWarningPercentage ] && [ $warningMessageHasBeenDelivered = false ]
     then
 
-      thresholdWarningMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%!\n$thresholdWarningMessage\nwhen percentage remaining reaches $thresholdActionPercentage%"
+      warningMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%!\n$thresholdWarningMessage\nwhen percentage remaining reaches $thresholdActionPercentage%"
+
+      logger "INFO (corgi-power-management-battery.shlib): $thresholdWarningMessage"
 
       if [ $hasZenity = true ]
       then
-        zenity --warning --title="Low Battery Warning" --text="$thresholdWarningMessage"
+        zenity --warning --title="Low Battery Warning" --text="$warningMessage" &
       fi
-      
-      logger "INFO (corgi-power-management-battery.shlib): $thresholdWarningMessage"
-      
-      hasServedThresholdWarning=true
+     
+      warningMessageHasBeenDelivered=true
     
     fi
 
     if [ $batteryPowerPercentageRemaining -le $thresholdActionPercentage ]
     then
 
-      thresholdActionMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%. $thresholdActionMessage"
-      hasServedThresholdWarning=false
+      actionMessage="Battery percentage remaining is $batteryPowerPercentageRemaining%. $thresholdActionMessage"
     	
-      logger "INFO (corgi-power-management-battery.shlib): $thresholdActionMessage"
+      logger "INFO (corgi-power-management-battery.shlib): $actionMessage"
      
       $thresholdActionCommand "$@"
     
-   fi
+    fi
+   
+    sleep $pollingFrequency
         
   done
   
@@ -254,7 +256,7 @@ pollBatteryStatusImpl() {
 # this method implements the implementation method, with job control (&),
 # to place it in the background.
 pollBatteryStatus() {
-	pollBatteryStatusImpl "$@" &
+  pollBatteryStatusImpl "$@" &
 }
 
 
