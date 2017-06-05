@@ -15,7 +15,7 @@
 # corgi-power-management-cpu.shlib - Functions used to describe and manage power management and throttling options for CPUs, 
 #                                                  using /proc/cpuinfo and cpupower as backends.
 #
-# v2017.06.04
+# v2017.06.05
 #
 # Authored by Antonio Malcolm
 #
@@ -248,30 +248,37 @@ getCpuFrequencyInfo() {
       governor=''
       response="`corgiFetchSubstringAfter "$response" ':'`"   
       
-      	# GHz notation was introduced with cpupower v4.9,
-      	# along with more verbose output...
+      # GHz notation was introduced with cpupower v4.9,
+      # along with more verbose output...
       	
-        if [ "$frequencyInfoOption" = '--policy' ]
+      if [ "$frequencyInfoOption" = '--policy' ]
+      then
+
+        if corgiHasSubstring "$response" 'frequency should be within'
         then
-
-          if corgiHasSubstring "$response" 'frequency should be within'
-          then
           	
-            governor="$dataDelimiter`corgiFetchSubstringBetween "$response" 'governor' 'may'`"
-            governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" '"'`"
-            governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" ' '`"
-            governor="`corgiTrimWhiteSpace "$governor"`"
+          governor="$dataDelimiter`corgiFetchSubstringBetween "$response" 'governor' 'may'`"
+          governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" '"'`"
+          governor="`corgiRemoveAllOccurrencesOfSubstring "$governor" ' '`"
+          governor="`corgiTrimWhiteSpace "$governor"`"
 
-            response="`corgiFetchSubstringBetween "$response" 'frequency should be within' 'The governor'`"
-            response="`corgiReplaceAllOccurrencesOfSubstring "$response" 'and' '-'`"
+          response="`corgiFetchSubstringBetween "$response" 'frequency should be within' 'The governor'`"
+          response="`corgiReplaceAllOccurrencesOfSubstring "$response" 'and' '-'`"
           
-          else
-            governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
-            response="`corgiFetchSubstringBefore "$response" ' '`"
-          fi            
+        else
+          governor="$dataDelimiter`corgiFetchSubstringAfter "$response" ' '`"
+          response="`corgiFetchSubstringBefore "$response" ' '`"
+        fi            
 
-        fi       
+      fi       
       
+      # Maintain compatibility, as best we can, with both cpupower v4.9,
+      # as well as with earlier versions (which provide both governor
+      # and frequency info with the --policy option)
+      
+      if corgiHasSubstring "$response" 'GHz' || corgiHasSubstring "$response" 'MHz'
+      then
+        	
       	response="`corgiRemoveAllOccurrencesOfSubstring "$response" '.'`"
       	
       	minSpeed="`corgiFetchSubstringBefore "$response" '-'`"
@@ -299,6 +306,8 @@ getCpuFrequencyInfo() {
       	then
       	  maxSpeed="`corgiRemoveAllOccurrencesOfSubstring "$maxSpeed" 'MHz'`"
       	fi
+      
+      fi
     
       echo "$minSpeed$dataDelimiter$maxSpeed$governor"
  
