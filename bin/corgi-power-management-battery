@@ -15,7 +15,7 @@
 # corgi-power-management-battery - handles management of battery status polling and the
 #                                  automation of actions to be taken upon low battery status
 #
-# v2016.10.21
+# v2017.06.29
 #
 # Authored by Antonio Malcolm
 #
@@ -48,12 +48,15 @@ case "$1" in
       
         shift
         shift
-
-        pollBatteryStatus "$@"
+        
+        # Prevent multiple instances...
+        pkill -f 'pollBatteryStatus'  
+        
+        sh -c "cd \"$currentDirectory\" ; . \"$corgiPowerManagementBatteryLib\" ; pollBatteryStatus $@" &
         
       ;;
       
-      'stop') pkill -f 'corgi-power-management-battery polling start' ;;
+      'stop') pkill -f 'pollBatteryStatus' ;;
     
     esac
   
