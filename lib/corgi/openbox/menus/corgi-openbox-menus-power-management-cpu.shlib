@@ -483,6 +483,13 @@ buildCpuSpeedOptionsMenuItemsBody() {
 
 buildCpuSpeedOptionsMenuItems() {
 
+  if [ $hasGkSudo != true ]
+  then
+    cpuOptionsGksudoRequiredItem="`corgiObMenuItem "label:requires gksudo"`"
+    echo "`corgiObPipeMenu "content:$cpuOptionsGksudoRequiredItem"`"
+    exit $?    
+  fi
+
   processorIds="$1"
   option="$2"
   messagePrefix="$3"
@@ -505,7 +512,12 @@ buildCpuSpeedOptionsMenuItems() {
 
 buildCpuGovernorOptionsMenuItems() {
   
-  cpuOptionsMenuItems=''
+  if [ $hasGkSudo != true ]
+  then
+    cpuOptionsGksudoRequiredItem="`corgiObMenuItem "label:requires gksudo"`"
+    echo "`corgiObPipeMenu "content:$cpuOptionsGksudoRequiredItem"`"
+    exit $?    
+  fi 
   
   processorIds="$1"
   messagePrefix="$2"
@@ -588,6 +600,7 @@ buildCpuGovernorOptionsMenuItems() {
       governorsSharedByAllProcessorIds="$governorsCheckedAcrossAllProcessorIds$dataDelimiter"
     fi
     
+    cpuOptionsMenuItems=''
     governorsSharedByAllProcessorIds="`corgiReplaceAllOccurrencesOfSubstring "$governorsSharedByAllProcessorIds" ' ' $dataDelimiter`"
     
     while corgiHasSubstring "$governorsSharedByAllProcessorIds" $dataDelimiter
@@ -614,17 +627,24 @@ buildCpuGovernorOptionsMenuItems() {
 
 
 buildCpuPerfBiasOptionsMenuItems() {
-  
-  cpuOptionsMenuItems=''
-  
+
+  if [ $hasGkSudo != true ]
+  then
+    cpuOptionsGksudoRequiredItem="`corgiObMenuItem "label:requires gksudo"`"
+    echo "`corgiObPipeMenu "content:$cpuOptionsGksudoRequiredItem"`"
+    exit $?    
+  fi
+
+  cpuOptionsMenuItems='' 
+
   processorIds="$1"
   messagePrefix="$2"
-  
+
   numPerformanceBiasOptions=15
-  
+
   while [ $numPerformanceBiasOptions -ge 0 ]
   do
-    
+
     perfBiasOption=$numPerformanceBiasOptions
     perfBiasLabel=$perfBiasOption
     
