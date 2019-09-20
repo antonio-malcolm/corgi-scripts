@@ -22,7 +22,6 @@
 # Requires: corgi-posix-core.shlib
 # Requires: cpupower - for obtaining information describing CPU performance and power saving characteristics,
 #                      as well as setting performance and power saving options
-# Requires: gksudo - to obtain permissions to make changes to CPU performance settings
 # Optional: libnotify - used for informational and success notifications
 
 
@@ -42,24 +41,16 @@ fi
 . "$corgiCoreLib"
 
 hasCpuPower=false
-hasGkSudo=false
 hasNotify=false
 
-if ! command -v cpupower > /dev/null
+if ! corgiHasCommand cpupower
 then
   logger "ERROR (corgi-power-management-cpu.shlib): cpupower not found. Please install cpupower"
 else 
   hasCpuPower=true
 fi
 
-if ! command -v gksudo > /dev/null
-then
-  logger "ERROR (corgi-power-management-cpu.shlib): gksudo not found. Please install gksudo"
-else 
-  hasGkSudo=true
-fi
-
-if ! command -v notify-send > /dev/null
+if ! corgiHasCommand notify-send
 then
   logger "INFO (corgi-power-management-cpu.shlib): libnotify (notify-send) not found. We will default to zenity, if it's available."
 else
@@ -668,180 +659,11 @@ setSpeedOnCpus() {
     
     exit 1     
     
-  fi  
+  fi
 
-  authenticationMessage="Setting the CPU freqeuncy requires an Administrator's password."
+  $cpuFrequencySetCommand
 
-  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" && {
-    
-    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
-    then
-      processorIds="$processorIds$dataDelimiter"
-    fi
-  
-    while corgiHasSubstring "$processorIds" $dataDelimiter
-    do
-      
-      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
-      
-      activeMinAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds" true`"
-      errorOccurred=false
-        
-      case "$option" in
-        
-        'abs')
-        
-          activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
-          activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
-          
-          if [ $desiredSpeed -ne $activeMinSpeed ] || [ $desiredSpeed -ne $activeMaxSpeed ]
-          then
-            errorOccurred=true  
-          fi
-          
-        ;;
-          
-        'min')  
-          
-          activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
-          
-          if [ $desiredSpeed -ne $activeMinSpeed ]
-          then
-            errorOccurred=true
-          fi
-          
-        ;;
-          
-        'max')
-          
-          activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
-  
-          if [ $desiredSpeed -ne $activeMaxSpeed ]
-          then
-            errorOccurred=true
-          fi
-          
-        ;;        
-          
-      esac 
-      
-      if [ $errorOccurred = true ]
-      then
-      
-        if [ -z "$failedProcessorIds" ]
-        then
-          failedProcessorIds="$processorId"  
-        else
-          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
-        fi
-        
-        hasErrors=true
-      
-      else
-        
-        if [ -z "$successfulProcessorIds" ]
-        then
-          successfulProcessorIds="$processorId"  
-        else
-          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
-        fi      
-  
-      fi
-      
-      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
-      
-    done
-          
-    if [ "$option" = 'abs' ]
-    then
-      option="an $option"
-    else
-      option="a $option"
-    fi  
-    
-    if [ ! -z "$successfulProcessorIds" ]
-    then
-       
-      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
-      then
-        response="$messagePrefix"'s '        
-        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
-        response="$response and"
-        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
-      else
-        response="$messagePrefix $successfulProcessorIds"
-      fi
-      
-      response="$response now set to $option frequency of $desiredSpeed MHz"
-      
-      if [ $hasNotify = true ]
-      then
-        notify-send --urgency="normal" "$response"
-      elif [ $hasZenity = true ]
-      then
-        zenity --info --title="Success" --text="$response"
-      fi       
-    
-    fi
-    
-    if [ $hasErrors = true ]
-    then
-      
-      response="Failed to set $option frequency of $desiredSpeed Mhz, for $messagePrefix"
-      
-      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
-      then
-        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
-        response="$response and"
-        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
-      else
-        response="$response $failedProcessorIds"
-      fi
-      
-      if [ $hasNotify = true ]
-      then
-        notify-send --urgency="critical" "$response"
-      elif [ $hasZenity = true ]
-      then
-        zenity --error --title="Failure" --text="$response"
-      fi       
-      
-      echo "ERROR (corgi-power-management-cpu.shlib): $response"
-      logger "ERROR (corgi-power-management-cpu.shlib): $response"
-  
-    fi
-    
-    exit 0
-        
-  }
-
-  gksudoStatus=$?
-  
-  if [ $gksudoStatus != 0 ]
-  then
-
-  	response=''
- 
-    if corgiHasSubstring "$processorIds" $dataDelimiter
-    then 	
-      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
-      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
-      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
-    fi	
-  	
-  	response="Failed to set frequency, for $messagePrefix$response, due to an authentication error"
-  	
-    if [ $hasNotify = true ]
-    then
-      notify-send --urgency="critical" "$response"
-    elif [ $hasZenity = true ]
-    then
-      zenity --error --title="Failure" --text="$response"
-    fi 	
-  	
-  fi 
-  
-  exit $gksudoStatus
+  exit $?
   
 }
 
@@ -853,28 +675,23 @@ setSpeedOnCpus() {
 # $3 - string, optional, user message prefix, used for success and error status messages -
 #      defaults to 'Processor'
 setGovernorOnCpus() {
-  
-  response=''
-  hasErrors=false
-  successfulProcessorIds=''
-  failedProcessorIds=''
-  
+
   processorIds="$1"
   desiredGovernor="$2"
   messagePrefix="$3"
-  
+
   if [ -z "$messagePrefix" ]
   then
     messagePrefix='Processor'
   fi  
-  
+
   governors="`cpupower --cpu "$processorIds" frequency-info | grep 'governors:'`"
   governors="`corgiFetchSubstringAfter "$governors" 'governors:'`$dataDelimiter"
   governors="`corgiTrimWhiteSpace "$governors"`"
   governors="`corgiReplaceAllOccurrencesOfSubstring "$governors" ' ' $dataDelimiter`"
 
   desiredGovernorMatchesAvailableGovernor=false
-  
+
   while corgiHasSubstring "$governors" $dataDelimiter
   do
     
@@ -924,135 +741,9 @@ setGovernorOnCpus() {
 
   fi
     
-  cpuFrequencySetCommand="cpupower --cpu $processorIds frequency-set --governor $desiredGovernor"
-  authenticationMessage="Setting the CPU governor requires an Administrator's password."
+  cpupower --cpu $processorIds frequency-set --governor $desiredGovernor
 
-  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" && {
-    
-    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
-    then
-      processorIds="$processorIds$dataDelimiter"
-    fi
-  
-    while corgiHasSubstring "$processorIds" $dataDelimiter
-    do
-      
-      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
-      
-      activeCpuFrequencyInfo="`getCpuFrequencyInfo "$processorId" 'user'`"
-      activeGovernor="`corgiFetchSubstringAfter "$activeCpuFrequencyInfo" "$dataDelimiter"`"
-      errorOccurred=false
-      
-      if [ "$desiredGovernor" != "$activeGovernor" ]
-      then
-      
-        if [ -z "$failedProcessorIds" ]
-        then
-          failedProcessorIds="$processorId"  
-        else
-          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
-        fi
-        
-        hasErrors=true
-      
-      else
-        
-        if [ -z "$successfulProcessorIds" ]
-        then
-          successfulProcessorIds="$processorId"  
-        else
-          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
-        fi      
-  
-      fi
-      
-      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
-      
-    done
-    
-    if [ ! -z "$successfulProcessorIds" ]
-    then
-       
-      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
-      then
-        response="$messagePrefix"'s '
-        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
-        response="$response and"
-        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
-      else
-        response="$messagePrefix $successfulProcessorIds"
-      fi
-      
-      response="$response, governor now set to $desiredGovernor"
-      
-      if [ $hasNotify = true ]
-      then
-        notify-send --urgency="normal" "$response"
-      elif [ $hasZenity = true ]
-      then
-        zenity --info --title="Success" --text="$response"
-      fi     
-    
-    fi
-    
-    if [ $hasErrors = true ]
-    then
-      
-      response="Failed to set governor, to $desiredGovernor, for $messagePrefix"
-      	
-      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
-      then
-        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
-        response="$response and"
-        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
-      else
-        response="$response $failedProcessorIds"
-      fi
-      
-      if [ $hasNotify = true ]
-      then
-        notify-send --urgency="critical" "$response"
-      elif [ $hasZenity = true ]
-      then
-        zenity --error --title="Failure" --text="$response"
-      fi
-
-    fi
-      
-    echo "ERROR (corgi-power-management-cpu.shlib): $response"
-    logger "ERROR (corgi-power-management-cpu.shlib): $response"
-    
-    exit 0  
-    
-  }
- 
-  gksudoStatus=$?
-  
-  if [ $gksudoStatus != 0 ]
-  then
-
-  	response=''
-
-    if corgiHasSubstring "$processorIds" $dataDelimiter
-    then
-      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
-      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
-      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
-    fi
-
-  	response="Failed to set governor, for $messagePrefix$response, due to an authentication error"
-
-    if [ $hasNotify = true ]
-    then
-      notify-send --urgency="critical" "$response"
-    elif [ $hasZenity = true ]
-    then
-      zenity --error --title="Failure" --text="$response"
-    fi
-
-  fi
-
-  exit gksudoStatus
+  exit $?
   
 }
 
@@ -1113,135 +804,8 @@ setPerfBiasOnCpus() {
     processorIds="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
   fi
     
-  cpuFrequencySetCommand="cpupower --cpu $processorIds set --perf-bias $desiredPerfBias"
-  authenticationMessage="Setting the CPU performance bias requires an Administrator's password."
+  cpupower --cpu $processorIds set --perf-bias $desiredPerfBias
 
-  gksudo --message "$authenticationMessage" --disable-grab "$cpuFrequencySetCommand" && {
-    
-    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
-    then
-      processorIds="$processorIds$dataDelimiter"
-    fi
-  
-    activePerfBias=''
-  
-    while corgiHasSubstring "$processorIds" $dataDelimiter
-    do
-      
-      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
-      
-      activePerfBias="`getCpuPowerInfo "$processorId" 'perf-bias'`"
-      errorOccurred=false
-      
-      if [ "$activePerfBias" == 'requires root' ] || [ $desiredPerfBias -ne $activePerfBias ]
-      then
-      
-        if [ -z "$failedProcessorIds" ]
-        then
-          failedProcessorIds="$processorId"  
-        else
-          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
-        fi
-        
-        hasErrors=true
-      
-      else
-        
-        if [ -z "$successfulProcessorIds" ]
-        then
-          successfulProcessorIds="$processorId"  
-        else
-          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
-        fi      
-  
-      fi
-      
-      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
-      
-    done
-    
-    if [ ! -z "$successfulProcessorIds" ]
-    then
-       
-      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
-      then
-        response="$messagePrefix"'s '
-        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
-        response="$response and"
-        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
-      else
-        response="$messagePrefix $successfulProcessorIds"
-      fi
-      
-      response="$response now set to a performance bias of $desiredPerfBias"
-      
-      if [ $hasNotify = true ]
-      then
-        notify-send --urgency="normal" "$response"
-      elif [ $hasZenity = true ]
-      then
-        zenity --info --title="Success" --text="$response"
-      fi       
-    
-    fi
-    
-    if [ $hasErrors = true ]
-    then
-      
-      response="Failed to set performance bias, to $desiredPerfBias, for $messagePrefix"
-      
-      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
-      then
-        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
-        response="$response and"
-        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
-      else
-        response="$response $failedProcessorIds"
-      fi
-      
-      if [ $hasNotify = true ]
-      then
-        notify-send --urgency="critical" "$response"
-      elif [ $hasZenity = true ]
-      then
-        zenity --error --title="Failure" --text="$response"
-      fi       
-      
-      echo "ERROR (corgi-power-management-cpu.shlib): $response"
-      logger "ERROR (corgi-power-management-cpu.shlib): $response"
-  
-    fi
-    
-    exit 0  
-    
-  }
- 
-  gksudoStatus=$?
-  
-  if [ $gksudoStatus != 0 ]
-  then
-
-  	response=''
-
-    if corgiHasSubstring "$processorIds" $dataDelimiter
-    then
-      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
-      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
-      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
-    fi
-
-  	response="Failed to set performance bias, for $messagePrefix$response, due to an authentication error"
-
-    if [ $hasNotify = true ]
-    then
-      notify-send --urgency="critical" "$response"
-    elif [ $hasZenity = true ]
-    then
-      zenity --error --title="Failure" --text="$response"
-    fi
-
-  fi
-
-  exit gksudoStatus
+  exit $?
   
 }
