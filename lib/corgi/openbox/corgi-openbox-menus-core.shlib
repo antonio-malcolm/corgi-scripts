@@ -127,7 +127,7 @@ corgiObMenuItemImpl() {
 
   if corgiArgIsNotEmpty "$label"
   then
-    menuItem="$menuItem label=\"$label\""
+    menuItem="$menuItem label=\"$label\""   
   fi
 
   if corgiArgIsNotEmpty "$icon"
@@ -142,7 +142,7 @@ corgiObMenuItemImpl() {
 
     menuItem="$menuItem<action name=\"$action\">"
 
-  if corgiArgIsNotEmpty "$prompt"
+    if corgiArgIsNotEmpty "$prompt"
     then
       menuItem="$menuItem<prompt>$prompt</prompt>"
     fi
