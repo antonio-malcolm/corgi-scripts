@@ -22,8 +22,10 @@
 # Requires: corgi-openbox-menus-core.shlib
 # Requires: corgi-power-management-cpu.shlib
 # Requires: corgi-posix-core.shlib (normally provided by corgi-openbox-menus-core.shlib or corgi-power-management-cpu.shlib)
+#
 # Requires: cpupower - for obtaining information describing CPU performance and power saving characteristics,
 #                      as well as setting performance and power saving options
+# Requires: zenity - used with sudo --askpass, to obtain permissions to make changes to CPU performance settings
 
 
 currentDirectory="`dirname "$0"`"
@@ -32,6 +34,7 @@ parentDirectory="`dirname $currentDirectory`"
 
 corgiObMenuLib="$parentDirectory/lib/corgi/openbox/corgi-openbox-menus-core.shlib"
 corgiPowerManagementCpuLib="$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib"
+corgiGuiSudoPrompt="$parentDirectory/bin/corgi-gui-sudo-prompt"
 
 if [ ! -e "$corgiObMenuLib" ]
 then
@@ -51,12 +54,20 @@ fi
 . "$corgiPowerManagementCpuLib"
 
 hasCpuPower=false
+hasZenity=false
 
-if ! command -v cpupower > /dev/null
+if ! corgiHasCommand cpupower
 then
   logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): cpupower not found. Please install cpupower"
 else 
   hasCpuPower=true
+fi
+
+if ! corgiHasCommand zenity
+then
+  logger "ERROR (corgi-openbox-menus-power-management-cpu.shlib): zenity not found. Please install zenity"
+else 
+  hasZenity=true
 fi
 
 
@@ -379,6 +390,197 @@ buildCpuActiveDetailMenuItems() {
 }
 
 
+promptZenityOnSetCpuSpeed() {
+
+  processorIds="$1"
+  option="$2"
+  desiredSpeed="$3"
+  isPercentage=$4
+  messagePrefix="$5"
+
+  if [ -z "$messagePrefix" ]
+  then
+    messagePrefix='Processor'
+  fi
+
+  export SUDO_ASKPASS="$corgiGuiSudoPrompt"
+  
+  cpuFrequencySetCommand="cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setSpeedOnCpus \"$processorIds\" \"$option\" \"$desiredSpeed\" false \"$messagePrefix\""
+
+  sudo --askpass sh -c "$cpuFrequencySetCommand" && {
+    
+    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+    then
+      processorIds="$processorIds$dataDelimiter"
+    fi
+  
+    while corgiHasSubstring "$processorIds" $dataDelimiter
+    do
+      
+      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+      
+      activeMinAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds" true`"
+      errorOccurred=false
+        
+      case "$option" in
+        
+        'abs')
+        
+          activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+          activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+          
+          if [ $desiredSpeed -ne $activeMinSpeed ] || [ $desiredSpeed -ne $activeMaxSpeed ]
+          then
+            errorOccurred=true  
+          fi
+          
+        ;;
+          
+        'min')  
+          
+          activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+          
+          if [ $desiredSpeed -ne $activeMinSpeed ]
+          then
+            errorOccurred=true
+          fi
+          
+        ;;
+          
+        'max')
+          
+          activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
+  
+          if [ $desiredSpeed -ne $activeMaxSpeed ]
+          then
+            errorOccurred=true
+          fi
+          
+        ;;        
+          
+      esac 
+      
+      if [ $errorOccurred = true ]
+      then
+      
+        if [ -z "$failedProcessorIds" ]
+        then
+          failedProcessorIds="$processorId"  
+        else
+          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
+        fi
+        
+        hasErrors=true
+      
+      else
+        
+        if [ -z "$successfulProcessorIds" ]
+        then
+          successfulProcessorIds="$processorId"  
+        else
+          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
+        fi      
+  
+      fi
+      
+      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+      
+    done
+          
+    if [ "$option" = 'abs' ]
+    then
+      option="an $option"
+    else
+      option="a $option"
+    fi  
+    
+    if [ ! -z "$successfulProcessorIds" ]
+    then
+       
+      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
+      then
+        response="$messagePrefix"'s '        
+        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
+      else
+        response="$messagePrefix $successfulProcessorIds"
+      fi
+      
+      response="$response now set to $option frequency of $desiredSpeed MHz"
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="normal" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --info --title="Success" --text="$response"
+      fi       
+    
+    fi
+    
+    if [ $hasErrors = true ]
+    then
+      
+      response="Failed to set $option frequency of $desiredSpeed Mhz, for $messagePrefix"
+      
+      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
+      then
+        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
+      else
+        response="$response $failedProcessorIds"
+      fi
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="critical" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --error --title="Failure" --text="$response"
+      fi       
+      
+      echo "ERROR (corgi-power-management-cpu.shlib): $response"
+      logger "ERROR (corgi-power-management-cpu.shlib): $response"
+  
+    fi
+    
+    exit 0
+        
+  }
+
+  sudoZenityStatus=$?
+  
+  if [ $sudoZenityStatus != 0 ]
+  then
+
+    response=''
+ 
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then  
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi  
+    
+    response="Failed to set frequency, for $messagePrefix$response, due to an authentication error"
+    
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi  
+    
+  fi 
+  
+  exit $sudoZenityStatus
+
+}
+
+
 buildCpuSpeedOptionsMenuItemsBody() {
   
   cpuOptionMenuItems=''
@@ -443,7 +645,7 @@ buildCpuSpeedOptionsMenuItemsBody() {
     if [ $desiredSpeed -ge $minSpeed ] && [ $desiredSpeed -le $maxSpeed ]
     then
 
-      setSpeedCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setSpeedOnCpus \"$processorIds\" \"$option\" \"$desiredSpeed\" false \"$messagePrefix\"'"
+      setSpeedCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib\" ; promptZenityOnSetCpuSpeed \"$processorIds\" \"$option\" \"$desiredSpeed\" false \"$messagePrefix\"'"
     
       case "$option" in
         
@@ -483,10 +685,10 @@ buildCpuSpeedOptionsMenuItemsBody() {
 
 buildCpuSpeedOptionsMenuItems() {
 
-  if [ $hasGkSudo != true ]
+  if [ $hasZenity != true ]
   then
-    cpuOptionsGksudoRequiredItem="`corgiObMenuItem "label:requires gksudo"`"
-    echo "`corgiObPipeMenu "content:$cpuOptionsGksudoRequiredItem"`"
+    cpuOptionsZenityRequiredItem="`corgiObMenuItem "label:requires zenity"`"
+    echo "`corgiObPipeMenu "content:$cpuOptionsZenityRequiredItem"`"
     exit $?    
   fi
 
@@ -510,12 +712,162 @@ buildCpuSpeedOptionsMenuItems() {
 }
 
 
+promptZenityOnSetCpuGovernor() {
+
+  response=''
+  hasErrors=false
+  successfulProcessorIds=''
+  failedProcessorIds=''
+
+  processorIds="$1"
+  desiredGovernor="$2"
+  messagePrefix="$3"
+
+  if [ -z "$messagePrefix" ]
+  then
+    messagePrefix='Processor'
+  fi
+  
+  export SUDO_ASKPASS="$corgiGuiSudoPrompt"
+  
+  cpuGovernorSetCommand="cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setGovernorOnCpus \"$processorIds\" \"$desiredGovernor\" \"$messagePrefix\""
+
+  sudo --askpass sh -c "$cpuGovernorSetCommand" && {
+    
+    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+    then
+      processorIds="$processorIds$dataDelimiter"
+    fi
+  
+    while corgiHasSubstring "$processorIds" $dataDelimiter
+    do
+      
+      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+      
+      activeCpuFrequencyInfo="`getCpuFrequencyInfo "$processorId" 'user'`"
+      activeGovernor="`corgiFetchSubstringAfter "$activeCpuFrequencyInfo" "$dataDelimiter"`"
+      errorOccurred=false
+      
+      if [ "$desiredGovernor" != "$activeGovernor" ]
+      then
+      
+        if [ -z "$failedProcessorIds" ]
+        then
+          failedProcessorIds="$processorId"  
+        else
+          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
+        fi
+        
+        hasErrors=true
+      
+      else
+        
+        if [ -z "$successfulProcessorIds" ]
+        then
+          successfulProcessorIds="$processorId"  
+        else
+          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
+        fi      
+  
+      fi
+      
+      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+      
+    done
+    
+    if [ ! -z "$successfulProcessorIds" ]
+    then
+       
+      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
+      then
+        response="$messagePrefix"'s '
+        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
+      else
+        response="$messagePrefix $successfulProcessorIds"
+      fi
+      
+      response="$response, governor now set to $desiredGovernor"
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="normal" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --info --title="Success" --text="$response"
+      fi     
+    
+    fi
+    
+    if [ $hasErrors = true ]
+    then
+      
+      response="Failed to set governor, to $desiredGovernor, for $messagePrefix"
+        
+      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
+      then
+        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
+      else
+        response="$response $failedProcessorIds"
+      fi
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="critical" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --error --title="Failure" --text="$response"
+      fi
+
+    fi
+      
+    echo "ERROR (corgi-power-management-cpu.shlib): $response"
+    logger "ERROR (corgi-power-management-cpu.shlib): $response"
+    
+    exit 0  
+    
+  }
+ 
+  sudoZenityStatus=$?
+  
+  if [ $sudoZenityStatus != 0 ]
+  then
+
+    response=''
+
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi
+
+    response="Failed to set governor, for $messagePrefix$response, due to an authentication error"
+
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi
+
+  fi
+
+  exit $sudoZenityStatus
+
+}
+
+
 buildCpuGovernorOptionsMenuItems() {
   
-  if [ $hasGkSudo != true ]
+  if [ $hasZenity != true ]
   then
-    cpuOptionsGksudoRequiredItem="`corgiObMenuItem "label:requires gksudo"`"
-    echo "`corgiObPipeMenu "content:$cpuOptionsGksudoRequiredItem"`"
+    cpuOptionsZenityRequiredItem="`corgiObMenuItem "label:requires zenity"`"
+    echo "`corgiObPipeMenu "content:$cpuOptionsZenityRequiredItem"`"
     exit $?    
   fi 
   
@@ -609,7 +961,7 @@ buildCpuGovernorOptionsMenuItems() {
       governor="`corgiFetchSubstringBefore "$governorsSharedByAllProcessorIds" $dataDelimiter 'first'`"
       governor="`corgiTrimWhiteSpace "$governor"`"
     
-      setGovernorCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setGovernorOnCpus \"$processorIds\" \"$governor\" \"$messagePrefix\"'"
+      setGovernorCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib\" ; promptZenityOnSetCpuGovernor \"$processorIds\" \"$governor\" \"$messagePrefix\"'"
       cpuOptionsMenuItems="$cpuOptionsMenuItems`corgiObMenuItem "label:$governor" "action:Execute" "command:$setGovernorCommand"`"    
     
       governorsSharedByAllProcessorIds="`corgiFetchSubstringAfter "$governorsSharedByAllProcessorIds" $dataDelimiter 'first'`"
@@ -626,21 +978,171 @@ buildCpuGovernorOptionsMenuItems() {
 }
 
 
-buildCpuPerfBiasOptionsMenuItems() {
+promptZenityOnSetCpuPerfBias() {
 
-  if [ $hasGkSudo != true ]
+  response=''
+  hasErrors=false
+  successfulProcessorIds=''
+  failedProcessorIds=''
+  
+  processorIds="$1"
+  desiredPerfBias=$2
+  messagePrefix="$3"
+
+  if [ -z "$messagePrefix" ]
   then
-    cpuOptionsGksudoRequiredItem="`corgiObMenuItem "label:requires gksudo"`"
-    echo "`corgiObPipeMenu "content:$cpuOptionsGksudoRequiredItem"`"
-    exit $?    
+    messagePrefix='Processor'
   fi
 
-  cpuOptionsMenuItems='' 
+  export SUDO_ASKPASS="$corgiGuiSudoPrompt"
+  
+  cpuPerfBiasSetCommand="cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setPerfBiasOnCpus \"$processorIds\" $desiredPerfBias \"$messagePrefix\""
+
+  sudo --askpass sh -c "$cpuPerfBiasSetCommand" && {
+    
+    if ! corgiEndsWithSubstring "$processorIds" $dataDelimiter
+    then
+      processorIds="$processorIds$dataDelimiter"
+    fi
+  
+    activePerfBias=''
+  
+    while corgiHasSubstring "$processorIds" $dataDelimiter
+    do
+      
+      processorId="`corgiFetchSubstringBefore "$processorIds" $dataDelimiter 'first'`"
+      
+      activePerfBias="`getCpuPowerInfo "$processorId" 'perf-bias'`"
+      errorOccurred=false
+      
+      if [ "$activePerfBias" == 'requires root' ] || [ $desiredPerfBias -ne $activePerfBias ]
+      then
+      
+        if [ -z "$failedProcessorIds" ]
+        then
+          failedProcessorIds="$processorId"  
+        else
+          failedProcessorIds="$failedProcessorIds$dataDelimiter $processorId"
+        fi
+        
+        hasErrors=true
+      
+      else
+        
+        if [ -z "$successfulProcessorIds" ]
+        then
+          successfulProcessorIds="$processorId"  
+        else
+          successfulProcessorIds="$successfulProcessorIds$dataDelimiter $processorId"
+        fi      
+  
+      fi
+      
+      processorIds="`corgiFetchSubstringAfter "$processorIds" $dataDelimiter 'first'`"
+      
+    done
+    
+    if [ ! -z "$successfulProcessorIds" ]
+    then
+       
+      if corgiHasSubstring "$successfulProcessorIds" $dataDelimiter
+      then
+        response="$messagePrefix"'s '
+        response="$response`corgiFetchSubstringBefore "$successfulProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$successfulProcessorIds" $dataDelimiter`"
+      else
+        response="$messagePrefix $successfulProcessorIds"
+      fi
+      
+      response="$response now set to a performance bias of $desiredPerfBias"
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="normal" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --info --title="Success" --text="$response"
+      fi       
+    
+    fi
+    
+    if [ $hasErrors = true ]
+    then
+      
+      response="Failed to set performance bias, to $desiredPerfBias, for $messagePrefix"
+      
+      if corgiHasSubstring "$failedProcessorIds" $dataDelimiter
+      then
+        response="$response""s `corgiFetchSubstringBefore "$failedProcessorIds" $dataDelimiter`"
+        response="$response and"
+        response="$response`corgiFetchSubstringAfter "$failedProcessorIds" $dataDelimiter`"
+      else
+        response="$response $failedProcessorIds"
+      fi
+      
+      if [ $hasNotify = true ]
+      then
+        notify-send --urgency="critical" "$response"
+      elif [ $hasZenity = true ]
+      then
+        zenity --error --title="Failure" --text="$response"
+      fi       
+      
+      echo "ERROR (corgi-power-management-cpu.shlib): $response"
+      logger "ERROR (corgi-power-management-cpu.shlib): $response"
+  
+    fi
+    
+    exit 0  
+    
+  }
+ 
+  sudoZenityStatus=$?
+  
+  if [ $sudoZenityStatus != 0 ]
+  then
+
+    response=''
+
+    if corgiHasSubstring "$processorIds" $dataDelimiter
+    then
+      response="$response"'s '"`corgiFetchSubstringBefore "$processorIds" $dataDelimiter`"
+      response="$response and `corgiFetchSubstringAfter "$processorIds" $dataDelimiter`"
+      response="`corgiReplaceAllOccurrencesOfSubstring "$response" $dataDelimiter "$dataDelimiter "`"
+    fi
+
+    response="Failed to set performance bias, for $messagePrefix$response, due to an authentication error"
+
+    if [ $hasNotify = true ]
+    then
+      notify-send --urgency="critical" "$response"
+    elif [ $hasZenity = true ]
+    then
+      zenity --error --title="Failure" --text="$response"
+    fi
+
+  fi
+
+  exit $sudoZenityStatus
+
+}
+
+
+buildCpuPerfBiasOptionsMenuItems() {
+
+  if [ $hasZenity != true ]
+  then
+    cpuOptionsZenityRequiredItem="`corgiObMenuItem "label:requires zenity"`"
+    echo "`corgiObPipeMenu "content:$cpuOptionsZenityRequiredItem"`"
+    exit $?    
+  fi
 
   processorIds="$1"
   messagePrefix="$2"
 
   numPerformanceBiasOptions=15
+  cpuOptionsMenuItems=''
 
   while [ $numPerformanceBiasOptions -ge 0 ]
   do
@@ -656,7 +1158,7 @@ buildCpuPerfBiasOptionsMenuItems() {
       perfBiasLabel='Max Performance'
     fi
     
-    setPerfBiasCommand="sh -c 'cd "$currentDirectory" ; . \"$parentDirectory/lib/corgi/corgi-power-management-cpu.shlib\" ; setPerfBiasOnCpus \"$processorIds\" $perfBiasOption \"$messagePrefix\"'"
+    setPerfBiasCommand="sh -c 'cd \"$currentDirectory\" ; . \"$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib\" ; promptZenityOnSetCpuPerfBias \"$processorIds\" $perfBiasOption \"$messagePrefix\"'"
     cpuOptionsMenuItems="$cpuOptionsMenuItems`corgiObMenuItem "label:$perfBiasLabel" "action:Execute" "command:$setPerfBiasCommand"`"
     
     numPerformanceBiasOptions=$(($numPerformanceBiasOptions - 1))
