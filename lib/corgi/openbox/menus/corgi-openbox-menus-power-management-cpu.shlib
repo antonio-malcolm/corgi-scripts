@@ -210,7 +210,7 @@ buildCpuDetailMenuItems() {
       
         cpuDetailMenuItems="$cpuDetailMenuItems`corgiObMenuItem "label:$label: $value"`"
       
-      fi     
+      fi
       
       additionalDetailPairs="`corgiFetchSubstringAfter "$additionalDetailPairs" $dataDelimiter 'first'`"
           
@@ -261,12 +261,11 @@ buildCpuDetailsMenu() {
     messagePrefix="$3"
   else
   
-    perfBiasSupport="`corgiFetchSubstringBetween "$additionalDetailPairs$dataDelimiter" 'Performance Bias' "$dataDelimiter" 'first'`"
-    
-    if [ ! -z "$perfBiasSupport" ] \
-    && ! corgiHasSubstring "$perfBiasSupport" 'unsupported'
+    perfBiasSupport="`corgiFetchSubstringBetween "$additionalDetailPairs$dataDelimiter" 'Performance Bias:' "$dataDelimiter" 'first'`"
+
+    if [ ! -z "$perfBiasSupport" ] && [ "$perfBiasSupport" != 'unsupported' ] && [ "$perfBiasSupport" != 'requires root' ]
     then
-      supportsPerfBias=true  
+      supportsPerfBias=true
     fi 
   
   fi
@@ -283,7 +282,7 @@ buildCpuDetailsMenu() {
     cpuSettingsMenu="`corgiObMenu "id:$menuId" "label:Set" "content:$cpuSettingsMenus"`"
   
   fi
-
+  
   echo "`corgiObPipeMenu "content:$detailMenuItems$cpuSettingsMenu"`"
   exit $?
   
@@ -310,6 +309,7 @@ buildCpuActiveDetailMenuItems() {
   boostState="$11"
           
   activeDetailMenuItems=''
+  notation=''
           
   if [ $baseSpeedsPassAudit = true ]
   then
@@ -350,20 +350,27 @@ buildCpuActiveDetailMenuItems() {
       activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Boost State: $notation"`"
     fi
           
-  fi  
+  fi
   
   if [ "$perfBias" != 'unsupported' ]
   then
           
     if [ $perfBiasesPassAudit = true ]
     then
-      notation='all '"$notationSuffix"'s'
-      activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Performance Bias: $notation $perfBias"`"
+
+      if [ "$perfBias" = 'requires root' ]
+      then
+        activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Performance Bias: $perfBias"`"
+      else
+        notation='all '"$notationSuffix"'s'
+        activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Performance Bias: $notation $perfBias"`"
+      fi
+
     else
       notation='set per '"$notationSuffix"
       activeDetailMenuItems="$activeDetailMenuItems`corgiObMenuItem "label:Active Performance Bias: $notation"`"
     fi
-  
+
   fi
 
   echo "$activeDetailMenuItems"
@@ -432,7 +439,7 @@ buildCpuSpeedOptionsMenuItemsBody() {
       desiredSpeed="`corgiDeriveNumberFromPercentage $speed $maxSpeed`"
       speed="$speed%"
     fi
-
+    
     if [ $desiredSpeed -ge $minSpeed ] && [ $desiredSpeed -le $maxSpeed ]
     then
 
@@ -475,24 +482,24 @@ buildCpuSpeedOptionsMenuItemsBody() {
 
 
 buildCpuSpeedOptionsMenuItems() {
-  
+
   processorIds="$1"
   option="$2"
   messagePrefix="$3"
-  
-  minAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds"`"
+
+  minAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds"`"  
   minSpeed="`corgiFetchSubstringBefore "$minAndMaxSpeeds" "$dataDelimiter"`"
   maxSpeed="`corgiFetchSubstringAfter "$minAndMaxSpeeds" "$dataDelimiter"`"
-    
+
   activeMinAndMaxSpeeds="`getMinAndMaxFrequencies "$processorIds" true`"
   activeMinSpeed="`corgiFetchSubstringBefore "$activeMinAndMaxSpeeds" "$dataDelimiter"`"
   activeMaxSpeed="`corgiFetchSubstringAfter "$activeMinAndMaxSpeeds" "$dataDelimiter"`"  
-  
+
   cpuOptionsMenuItems="`buildCpuSpeedOptionsMenuItemsBody "$processorIds" "$minSpeed" "$maxSpeed" "$activeMinSpeed" "$activeMaxSpeed" "$option" "$messagePrefix"`"
-  
+
   echo "`corgiObPipeMenu "content:$cpuOptionsMenuItems"`"
   exit $?
-  
+
 }
 
 
@@ -518,7 +525,7 @@ buildCpuGovernorOptionsMenuItems() {
     do
     
       governors="`corgiFetchSubstringAfter "$line" 'governors:'`$dataDelimiter"
-      governors="`corgiTrimWhiteSpace "$governors"`" 
+      governors="`corgiTrimWhiteSpace "$governors"`"
 
       if [ -z "$governorsCheckedAcrossAllProcessorIds" ]
       then
@@ -699,7 +706,7 @@ buildCpuCoreMenu() {
   coreId="$2"
   perfBiases="$3"
   coreThreads="$4"
-  
+
   if [ $coreThreads != false ]
   then
   
@@ -722,27 +729,31 @@ buildCpuCoreMenu() {
               
     threadIds="$coreThreads"
     threadCount=0
-              
+        
     while corgiHasSubstring "$coreThreads" $dataDelimiter
     do
-              
+                
       threadId="`corgiFetchSubstringBefore "$coreThreads" $dataDelimiter 'first'`"
       threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$processorId-core-$coreId-threads-$threadId&quot; &quot;Thread&quot;'"              
   
       threadPerfBias='unsupported'
-  
-      if [ $perfBiases != 'unsupported' ]
+
+      if [ "$perfBiases" != 'unsupported' ]
       then  
-      
-        threadPerfBias="`corgiFetchSubstringBefore "$perfBiases" $dataDelimiter 'first'`"
+
+        if [ "$perfBiases" = 'requires root' ]
+        then
+          threadPerfBias="$perfBiases"
+        else
+          supportsPerfBias=true
+          threadPerfBias="`corgiFetchSubstringBefore "$perfBiases" $dataDelimiter 'first'`"
+          perfBiases="`corgiFetchSubstringAfter "$perfBiases" $dataDelimiter 'first'`"
+        fi
+        
         perfBiasItemPair="Active Performance Bias:$threadPerfBias"
-        supportsPerfBias=true
         threadMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-power-management-cpu.shlib&quot; ; buildCpuDetailsMenu &quot;$threadId&quot; &quot;$perfBiasItemPair&quot; &quot;$processorId-core-$coreId-threads-$threadId&quot; &quot;Thread&quot;'"              
-      
-        perfBiases="`corgiFetchSubstringAfter "$perfBiases" $dataDelimiter 'first'`"
-      
+
       fi
-    
   
       menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-core-$coreId-threads-$threadId-"`"
       threadMenus="$threadMenus`corgiObMenu "id:$menuId" "label:$threadId" "execute:$threadMenuCommand"`"
@@ -828,9 +839,15 @@ buildCpuCoreMenu() {
   
     if [ $perfBiases != 'unsupported' ]
     then
-      supportsPerfBias=true
+      
+      if [ "$perfBiases" != 'requires root' ]
+      then
+        supportsPerfBias=true
+      fi
+    
       perfBiasItemPair="Active Performance Bias:$perfBiases"
       menuContent="`buildCpuDetailMenuItems "$coreId" 'user' "$perfBiasItemPair"`"  
+    
     fi
     
     coreSettingsMenus="`buildCpuSettingsMenus "$coreId" $supportsPerfBias "$processorId-core-$coreId" "Core $coreId"`"
@@ -963,19 +980,19 @@ buildCpusMenu() {
                 if [ ! -z "$corePerfBias" ]
                 then    
                   
-                  if [ "$corePerfBiases" = 'unsupported' ]
+                  if [ "$corePerfBiases" != 'unsupported' ] && [ "$corePerfBiases" != 'requires root' ]
                   then
-                    corePerfBiases=''
+                    corePerfBiases="$corePerfBiases$corePerfBias$dataDelimiter"
+                  else
+                    corePerfBiases="$corePerfBias"
                   fi
-                  
-                  corePerfBiases="$corePerfBiases$corePerfBias$dataDelimiter"
                 
                 fi
                 
                 perfBiasThreads="`corgiFetchSubstringAfter "$perfBiasThreads" $dataDelimiter 'first'`"
               
               done
-            
+         
             else
               
               corePerfBias="`getCpuPowerInfo "$coreId" 'perf-bias'`"
@@ -1178,7 +1195,14 @@ buildCpusMenu() {
         
         if [ $supportsPerfBias = true ]
         then
-          perfBiasDetailMenuItem="Performance Bias:supported"  
+
+          if [ "$sampledPerfBiasForAudit" = 'requires root' ]
+          then
+            perfBiasDetailMenuItem="Performance Bias:$sampledPerfBiasForAudit"
+          else
+            perfBiasDetailMenuItem="Performance Bias:supported"
+          fi
+
         fi        
         
         cpuSettingsId="$processorId"
@@ -1225,7 +1249,12 @@ buildCpusMenu() {
           fi
         
         fi
-        
+      
+        if [ "$sampledPerfBiasForAudit" = 'requires root' ]
+        then
+          supportsPerfBias=false
+        fi   
+
         cpuSettingsMenus="`buildCpuSettingsMenus "$cpuSettingsId" $supportsPerfBias "$processorId" "$cpuSettingsMessagePrefix"`"
         
         menuId="`corgiMakeIdString "corgi-menu-power-management-cpu-$processorId-set-"`"
