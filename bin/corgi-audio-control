@@ -39,4 +39,4 @@ export XAUTHORITY=/home/$USER/.Xauthority
 
 . "$corgiAudioManagementLib"
 
-setAudio "$@"
+setAudioLevel "$@"

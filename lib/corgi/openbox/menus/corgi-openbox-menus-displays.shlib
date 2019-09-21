@@ -461,7 +461,7 @@ buildDisplaysMenu() {
 	
 	if [ $hasXrandr = false ]
 	then
-  	echo "`corgiObMenuItem "label:displays menu requires xrandr..."`"
+  	echo "`corgiObMenuItem "label:displays menu requires xrandr"`"
   	exit 1
 	fi
 

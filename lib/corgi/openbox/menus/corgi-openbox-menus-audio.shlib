@@ -49,86 +49,556 @@ fi
 . "$corgiObMenuLib"
 . "$corgiAudioManagementLib"
 
+hasAlsa=false
+hasPulseAudio=false
+
+if ! corgiHasCommand aplay || ! corgiHasCommand arecord
+then
+  logger "ERROR (corgi-openbox-menus-displays.shlib): alsa not found. Please install alsa."
+else 
+  hasAlsa=true
+fi
+
+if ! corgiHasCommand pactl
+then
+  logger "ERROR (corgi-openbox-menus-displays.shlib): pulseaudio not found. Please install pulseaudio"
+else 
+  hasPulseAudio=true
+fi
+
 
 # Generates and echoes Openbox menus (as an XML-formatted string) which permits the manipulation of audio output level.
 #
 # $1 - string, required, the name of the interface which is used to set the display brightness
-buildAudioLevelsMenu() {
+buildVolumeLevelsControlsMenu() {
+  
+  control="$1"
+  shouldUsePulseAudio=$2
 
-  setAudioOutputLevelCommand="corgi-audio-control \"mute\""
-  setAudioOutputLevelItems="`corgiObMenuItem "label:Mute/Unmute" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
+  then
+    shouldUsePulseAudio=false 
+  fi
+
+  muteVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-mute.png"
+  setVolumeLevelCommand="corgi-audio-control &quot;mute&quot; &quot;$control&quot;"
+  setVolumeLevelMenuItems="`corgiObMenuItem "label:Mute/Unmute" "icon=$muteVolumeIcon" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"up\""
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:Higher" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;up&quot; &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:Higher" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"down\""
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:Lower" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;down&quot; &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:Lower" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 10"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:10%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  minVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-min.png"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 10 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:10%" "icon=$minVolumeIcon" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 15"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:15%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 15 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:15%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 20"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:20%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 20 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:20%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 25"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:25%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 25 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:25%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 30"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:30%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 30 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:30%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 35"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:35%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 35 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:35%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 40"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:40%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 40 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:40%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 45"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:45%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 45 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:45%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 50"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:50%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 50 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:50%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 55"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:55%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 55 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:55%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 60"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:60%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 60 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:60%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 65"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:65%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 65 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:65%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 70"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:70%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 70 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:70%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 75"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:75%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 75 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:75%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 80"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:80%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 80 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:80%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 85"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:85%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 85 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:85%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 90"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:90%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 90 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:90%" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 95"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:95%" "action:Execute" "command:$setAudioOutputLevelCommand"`"  
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 95 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:95%" "action:Execute" "command:$setVolumeLevelCommand"`"  
   
-  setAudioOutputLevelCommand="corgi-audio-control \"percent\" 100"
-  setAudioOutputLevelItems="$setAudioOutputLevelItems`corgiObMenuItem "label:100%" "action:Execute" "command:$setAudioOutputLevelCommand"`"
+  maxVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-max.png"
+  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 100 &quot;$control&quot; $shouldUsePulseAudio"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:100%" "icon=$maxVolumeIcon" "action:Execute" "command:$setVolumeLevelCommand"`"
   
-  menuId="`corgiMakeIdString "corgi-menus-audio-levels-"`"
-  echo "`corgiObMenu "id:$menuId" "label:Set Volume" "content:$setAudioOutputLevelItems"`"
+  echo "`corgiObPipeMenu "content:$setVolumeLevelMenuItems"`"
+  exit $?
+
+}
+
+
+buildAlsaDeviceControlMenu() {
+
+  control="$1"
+  deviceIoType="$2"
+  shouldUsePulseAudio=$3
+  card="$4"
+  device="$5"
+
+  if [ -z "$deviceIoType" ]
+  then
+    deviceIoType='simple'
+  fi
+
+  if [ $deviceIoType = true ] || [ $deviceIoType = false ]
+  then
+    deviceIoType='simple'
+    shouldUsePulseAudio=$2
+  fi
+
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
+  then
+    shouldUsePulseAudio=false 
+  fi
+
+  if [ ! -z "$card" ]
+  then
+    card=": $card"
+  fi
+
+  if [ ! -z "$device" ]
+  then
+    device=", $device"
+  fi
+
+  controlMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildVolumeLevelsControlsMenu &quot;$control&quot; $shouldUsePulseAudio'"
+  controlMenuId="`corgiMakeIdString "corgi-menu-audio-control-$deviceIoType-"`"
+
+  echo "`corgiObMenu "id:$controlMenuId" "label:$control$card$device" "execute:$controlMenuCommand"`"
+  exit $?
+
+}
+
+
+buildAlsaDeviceControlsMenus() {
+
+  deviceIoType="$1"
+  shouldUsePulseAudio=$2
+
+  if [ -z "$deviceIoType" ]
+  then
+    deviceIoType='simple'
+  fi
+
+  if [ $deviceIoType = true ] || [ $deviceIoType = false ]
+  then
+    deviceIoType='simple'
+    shouldUsePulseAudio=$1
+  fi
+
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
+  then
+    shouldUsePulseAudio=false 
+  fi
+
+  alsaCommand='amixer scontrols'
+
+  if [ "$deviceIoType" != 'simple' ]
+  then
+
+    if [ "$deviceIoType" != 'input' ]
+    then
+      alsaCommand='aplay --list-pcms'
+    else
+      alsaCommand='arecord --list-pcms'
+    fi
+
+  fi
+
+  controlMenus=''
+  controlByCardMenus=''
+  processedCards="$corgiDelimiter"
+  
+  $alsaCommand | {
+
+    inputDeviceMenus=''
+    outputDeviceMenus=''
+    simpleDeviceMenus=''
+
+    while read -r line
+    do
+
+      if [ "$deviceIoType" = 'simple' ]
+      then
+
+        control="`corgiFetchSubstringBetween "$line" "'" "'"`"
+        simpleDeviceMenus="$simpleDeviceMenus`buildAlsaDeviceControlMenu "$control" 'output' $shouldUsePulseAudio`"
+
+      else
+      
+        if ! corgiStartsWithSubstring "$line" ' ' && ! corgiStartsWithSubstring "$line" 'null'
+        then
+
+          if corgiHasSubstring "$line" ':' || corgiStartsWithSubstring "$line" 'default'
+          then
+
+            controlAndCard="`corgiFetchSubstringBefore "$line" ','`"
+            control="`corgiFetchSubstringBefore "$controlAndCard" ':'`"
+            card=''
+            device=''
+
+            if [ "$control" != 'default' ]
+            then
+
+              card="`corgiFetchSubstringBetween "$controlAndCard" 'CARD=' ','`"
+
+              if [ "$control" != 'sysdefault' ]
+              then
+                device="`corgiFetchSubstringAfter "$line" 'DEV='`"
+              fi
+
+            fi
+
+            if [ "$deviceIoType" != 'input' ]
+            then
+              outputDeviceMenus="$outputDeviceMenus`buildAlsaDeviceControlMenu "$control" 'output' $shouldUsePulseAudio "$card" "$device"`"
+            else
+              inputDeviceMenus="$inputDeviceMenus`buildAlsaDeviceControlMenu "$control" 'input' $shouldUsePulseAudio "$card" "$device"`"
+            fi
+
+          fi
+
+        fi
+
+      fi
+
+    done
+
+    echo "`corgiObPipeMenu "content:$inputDeviceMenus$outputDeviceMenus$simpleDeviceMenus"`"
+    exit 0
+
+  }
+
+  exit $?
+  
+}
+
+
+buildDevicesAlsaPcmsMenuItems() {
+  
+  cardName="$1"
+  devNumber=$2
+  
+  grepSearchText="[C]ARD=$cardName,DEV=$devNumber"
+
+  pcmsMenuItems=''
+
+  aplay --list-pcms | grep "$grepSearchText" | {
+  
+    while read -r line
+    do
+
+      controlAndCard="`corgiFetchSubstringBefore "$line" ','`"
+      control="`corgiFetchSubstringBefore "$controlAndCard" ':'`"
+      card=": `corgiFetchSubstringBetween "$controlAndCard" 'CARD=' ','`"
+      device=", `corgiFetchSubstringAfter "$line" 'DEV='`"
+
+      pcmsMenuItems="$pcmsMenuItems`corgiObMenuItem "label:$control$card$device"`"
+
+    done
+
+    echo "$pcmsMenuItems"
+    exit 0
+
+  }
+
+  exit $?
+
+}
+
+
+buildDevicesAlsaMenu() {
+
+  deviceIoType=$1
+  
+  if [ "$deviceIoType" != 'input' ]
+  then
+    deviceIoType='aplay'
+  else
+    deviceIoType='arecord'
+  fi
+
+  alsaDeviceMenus=''
+
+  $deviceIoType --list-devices | {
+  
+    while read -r line
+    do
+
+      if corgiStartsWithSubstring "$line" 'card'
+      then
+
+        cardName="`corgiFetchSubstringBetween "$line" 'card ' ' ' 'first'`"
+        cardName="$cardName `corgiFetchSubstringBetween "$line" '[' ']' 'first'`"
+        
+        cardShortName="`corgiFetchSubstringBetween "$line" ': ' ' [' 'first'`"
+
+        deviceNumber="`corgiFetchSubstringBetween "$line" 'device ' ':' 'last'`"
+        deviceName="$deviceNumber: `corgiFetchSubstringBetween "$line" '[' ']' 'last'`"
+        deviceDescription="`corgiFetchSubstringBetween "$line" ': ' ' [' 'last'`"
+
+        cardMenuItem="`corgiObMenuItem "label:Card: $cardName"`"
+        deviceDescriptionMenuItem="`corgiObMenuItem "label:Description: $deviceDescription"`"
+
+        alsaPcmsMenuItems="`buildDevicesAlsaPcmsMenuItems "$cardShortName" "$deviceNumber"`"
+        
+        menuId="`corgiMakeIdString "corgi-menus-audio-devices-alsa-pcms-"`"
+        
+        if [ ! -z "$alsaPcmsMenuItems" ]
+        then
+          alsaPcmsMenu="`corgiObMenu "id:$menuId" "label:PCMs" "content:$alsaPcmsMenuItems"`"
+        else
+          alsaPcmsMenu=''
+        fi
+
+        menuId="`corgiMakeIdString "corgi-menus-audio-device-alsa-"`"
+        alsaDeviceMenus="$alsaDeviceMenus`corgiObMenu "id:$menuId" "label:$deviceName" "content:$deviceDescriptionMenuItem$cardMenuItem$alsaPcmsMenu"`"
+
+      fi
+
+    done
+
+    echo "`corgiObPipeMenu "content:$alsaDeviceMenus"`"
+    exit 0
+
+  }
   
   exit $?
 
 }
 
+
+buildDevicesPulseAudioMenu() {
+
+  deviceIoType=$1
+  
+  if [ "$deviceIoType" != 'input' ]
+  then
+    deviceIoType='list sinks'
+  else
+    deviceIoType='list sources'
+  fi
+
+  pulseAudioMenus=''
+
+  pactl $deviceIoType | grep -e 'Name:' -e 'Description:' -e 'alsa.name =' -e \
+  'alsa.device =' -e 'alsa.card_name =' -e 'device.product.name =' -e 'device.vendor.name =' | {
+
+    pulseAudioMenuItems=''
+    name=''
+    description=''
+    alsaDeviceName=''
+    alsaDeviceNumber=''
+    alsaCardName=''
+    alsaCardNumber=''
+    productName=''
+    deviceVendor=''
+
+    while read -r line
+    do
+
+      line="`corgiTrimWhiteSpace "$line"`"
+
+      if corgiStartsWithSubstring "$line" 'Connection failure'
+      then
+        menuId="`corgiMakeIdString "corgi-menus-audio-device-pulseaudio-"`"
+        pulseAudioMenus="$pulseAudioMenus`corgiObMenu "id:$menuId" "label:pulseaudio connection required"`"        
+      fi
+
+      if corgiStartsWithSubstring "$line" 'Name:'
+      then
+
+        if [ ! -z "$name" ]
+        then
+
+          pulseAudioMenuItems="`corgiObMenuItem "label:$description"`"
+          pulseAudioMenuItems="$pulseAudioMenuItems`corgiObMenuItem "label:Alsa Device: $alsaDeviceNumber: $alsaDeviceName"`"
+          pulseAudioMenuItems="$pulseAudioMenuItems`corgiObMenuItem "label:Alsa Card: $alsaCardNumber: $alsaCardName"`"          
+          pulseAudioMenuItems="$pulseAudioMenuItems`corgiObMenuItem "label:Vendor Product: $productName"`"
+          pulseAudioMenuItems="$pulseAudioMenuItems`corgiObMenuItem "label:Vendor $deviceVendor"`"
+
+          menuId="`corgiMakeIdString "corgi-menus-audio-device-pulseaudio-"`"
+          pulseAudioMenus="$pulseAudioMenus`corgiObMenu "id:$menuId" "label:$name" "content:$pulseAudioMenuItems"`"
+
+        fi
+
+        name="`corgiFetchSubstringAfter "$line" ': '`"
+
+        pulseAudioMenuItems=''
+        description=''
+        alsaDeviceName=''
+        alsaDeviceNumber=''
+        alsaCardName=''
+        alsaCardNumber=''
+        productName=''
+        deviceVendor=''
+
+      fi
+
+      if corgiStartsWithSubstring "$line" 'Description:'
+      then
+        description="$line"
+      fi
+
+      if corgiStartsWithSubstring "$line" 'alsa.name'
+      then
+        alsaDeviceName="`corgiFetchSubstringBetween "$line" '"' '"'`"
+      fi
+
+      if corgiStartsWithSubstring "$line" 'alsa.device'
+      then
+        alsaDeviceNumber="`corgiFetchSubstringBetween "$line" '"' '"'`"
+      fi
+
+      if corgiStartsWithSubstring "$line" 'alsa.card_name'
+      then
+        alsaCardName="`corgiFetchSubstringBetween "$line" '"' '"'`"
+      fi
+
+      if corgiStartsWithSubstring "$line" 'alsa.card ='
+      then
+        alsaCardNumber="`corgiFetchSubstringBetween "$line" '"' '"'`"
+      fi
+
+      if corgiStartsWithSubstring "$line" 'device.product.name'
+      then
+        productName="`corgiFetchSubstringBetween "$line" '"' '"'`"
+      fi
+
+      if corgiStartsWithSubstring "$line" 'device.vendor.name'
+      then
+        deviceVendor="`corgiFetchSubstringBetween "$line" '"' '"'`"
+      fi
+
+    done
+
+    echo "`corgiObPipeMenu "content:$pulseAudioMenus"`"
+    exit 0
+
+  }
+  
+  exit $?
+
+}
+
+
+buildDevicesMenu() {
+
+  devicesAlsaInputsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildDevicesAlsaMenu &quot;input&quot;'"
+
+  menuId="`corgiMakeIdString "corgi-menu-audio-devices-alsa-inputs-"`"
+  devicesAlsaMenus="`corgiObMenu "id:$menuId" "label:Input" "execute:$devicesAlsaInputsMenuCommand"`"
+
+  devicesAlsaOutputsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildDevicesAlsaMenu &quot;output&quot;'"
+
+  menuId="`corgiMakeIdString "corgi-menu-audio-devices-alsa-outputs-"`"
+  devicesAlsaMenus="$devicesAlsaMenus`corgiObMenu "id:$menuId" "label:Output" "execute:$devicesAlsaOutputsMenuCommand"`"
+
+  menuId="`corgiMakeIdString "corgi-menu-audio-devices-alsa-"`"
+  devicesAlsaMenu="`corgiObMenu "id:$menuId" "label:ALSA" "content:$devicesAlsaMenus"`"
+
+  devicesPulseAudioMenu=''
+
+  if [ $hasPulseAudio = true ]
+  then
+
+    devicesPulseAudioInputsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildDevicesPulseAudioMenu &quot;input&quot;'"
+
+    menuId="`corgiMakeIdString "corgi-menu-audio-devices-pulseaudio-inputs-"`"
+    devicesPulseAudioMenus="`corgiObMenu "id:$menuId" "label:Input" "execute:$devicesPulseAudioInputsMenuCommand"`"
+
+    devicesPulseAudioOutputsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildDevicesPulseAudioMenu &quot;output&quot;'"
+
+    menuId="`corgiMakeIdString "corgi-menu-audio-devices-pulseaudio-outputs-"`"
+    devicesPulseAudioMenus="$devicesPulseAudioMenus`corgiObMenu "id:$menuId" "label:Output" "execute:$devicesPulseAudioOutputsMenuCommand"`"
+
+    menuId="`corgiMakeIdString "corgi-menu-audio-devices-pulseaudio-"`"
+    devicesPulseAudioMenu="`corgiObMenu "id:$menuId" "label:PulseAudio" "content:$devicesPulseAudioMenus"`"
+
+  fi
+
+  menuId="`corgiMakeIdString "corgi-menu-audio-device-alsa-"`"
+  echo "`corgiObMenu "id:$menuId" 'label:Devices' "content:$devicesAlsaMenu$devicesPulseAudioMenu"`"
+  exit $?
+
+}
+
+buildControlsMenu() {
+
+  shouldUsePulseAudio=$1
+
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
+  then
+    shouldUsePulseAudio=false 
+  fi
+
+  inputControlsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildAlsaDeviceControlsMenus &quot;input&quot; $shouldUsePulseAudio'"
+
+  menuId="`corgiMakeIdString "corgi-menu-audio-controls-input-"`"
+  inputControlsMenu="`corgiObMenu "id:$menuId" "label:Inputs" "execute:$inputControlsMenuCommand"`"
+
+  outputControlsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildAlsaDeviceControlsMenus &quot;output&quot; $shouldUsePulseAudio'"
+  
+  menuId="`corgiMakeIdString "corgi-menu-audio-controls-output-"`"
+  outputControlsMenu="`corgiObMenu "id:$menuId" "label:Outputs" "execute:$outputControlsMenuCommand"`"
+
+  simpleControlsMenuCommand="sh -c 'cd &quot;$currentDirectory&quot; ; . &quot;$parentDirectory/lib/corgi/openbox/menus/corgi-openbox-menus-audio.shlib&quot; ; buildAlsaDeviceControlsMenus &quot;simple&quot; $shouldUsePulseAudio'"
+  
+  menuId="`corgiMakeIdString "corgi-menu-audio-controls-simple-"`"
+  simpleControlsMenu="`corgiObMenu "id:$menuId" "label:Simple" "execute:$simpleControlsMenuCommand"`"
+
+  menuId="`corgiMakeIdString "corgi-menu-audio-controls-"`"
+  echo "`corgiObMenu "id:$menuId" 'label:Controls' "content:$inputControlsMenu$outputControlsMenu$simpleControlsMenu"`"
+  exit $?
+
+}
+
 buildAudioMenu() {
-  echo "`buildAudioLevelsMenu`"
+
+  if [ $hasAlsa = false ]
+  then
+    echo "`corgiObMenuItem "label:audio menu requires alsa"`"
+    exit 1
+  fi
+
+  shouldUsePulseAudio=$1
+
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
+  then
+    shouldUsePulseAudio=false 
+  fi
+
+  controlsMenu="`buildControlsMenu`"
+  devicesMenu="`buildDevicesMenu`"
+  
+  echo "$controlsMenu$devicesMenu"
   exit $?
 }

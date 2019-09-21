@@ -44,25 +44,32 @@ then
 
 fi
 
-setAudio() {
+setAudioLevel() {
 
   audioHandler=amixer
 
   option="$1"
-  usePulseAudio=$2
+  control="$2"
+  shouldUsePulseAudio=$3
 
   if [ "$option" = 'percent' ]
   then
 		
     percentage=$2
-    usePulseAudio=$3
+    control="$3"
+    shouldUsePulseAudio=$4
 	
     if [ -z "$percentage" ]
     then
       percentage=25
     elif [ $percentage = true ] || [ $percentage = false ]
     then
-      usePulseAudio=$percentage
+      shouldUsePulseAudio=$percentage
+      percentage=25
+    elif [ $control = true ] || [ $control = false ]
+    then
+      shouldUsePulseAudio=$control
+      control='Master'
       percentage=25
     fi
 	  
@@ -75,33 +82,38 @@ setAudio() {
     fi
 	
   fi
+
+  if [ -z "$control" ]
+  then
+    control='Master'
+  fi
   
   if [ "$option" = 'mute' ]
   then
-  	usePulseAudio=false	
+  	shouldUsePulseAudio=false	
   fi
 	
-	if [ -z "$usePulseAudio" ] || [ $usePulseAudio != true ]
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
 	then
-	  usePulseAudio=false	
+	  shouldUsePulseAudio=false	
   fi
 	
-  if [ $usePulseAudio = true ] && [ $hasPulseAudio = true ]
+  if [ $shouldUsePulseAudio = true ] && [ $hasPulseAudio = true ]
   then
   	audioHandler="$audioHandler --device pulse"
   fi  	
 
   case "$option" in
 
-    'up') $audioHandler 'sset' 'Master' '5%+' ;;
-    'down') $audioHandler 'sset' 'Master' '5%-' ;;
-    'min') $audioHandler 'sset' 'Master' '5%' ;;
-    'max') $audioHandler 'sset' 'Master' '100%' ;;
-    'percent') $audioHandler 'sset' 'Master' "$percentage%" ;;
+    'up') $audioHandler 'sset' "$control" '5%+' ;;
+    'down') $audioHandler 'sset' "$control" '5%-' ;;
+    'min') $audioHandler 'sset' "$control" '5%' ;;
+    'max') $audioHandler 'sset' "$control" '100%' ;;
+    'percent') $audioHandler 'sset' "$control" "$percentage%" ;;
 
     'mute')
 
-      $audioHandler 'sget' 'Master' | {
+      $audioHandler 'sget' "$control" | {
       
         muteDirective='unmute'
 
@@ -124,7 +136,7 @@ setAudio() {
 
         done
 
-        $audioHandler 'sset' 'Master' "$muteDirective"
+        $audioHandler 'sset' "$control" "$muteDirective"
         exit $?
 
       }
