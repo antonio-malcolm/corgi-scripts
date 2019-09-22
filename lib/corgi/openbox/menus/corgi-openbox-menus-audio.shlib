@@ -113,7 +113,11 @@ buildSetVolumeLevelsControlsMenuItem() {
     fi
 
     setVolumeLevelCommand="corgi-audio-control &quot;mute&quot; &quot;$control&quot; $shouldUsePulseAudio"
+<<<<<<< HEAD
     setVolumeLevelMenuItem="`corgiObMenuItem "label:Mute / Unmute" "$icon" "action:Execute" "command:$setVolumeLevelCommand"`"
+=======
+    setVolumeLevelMenuItem="`corgiObMenuItem "label:Mute/Unmute" "$icon" "action:Execute" "command:$setVolumeLevelCommand"`"
+>>>>>>> corgi-audio-management: add icons to openbox menu, to indicate volume level and muted state
 
   elif [ "$percentage" = 'up' ]
   then
@@ -130,8 +134,12 @@ buildSetVolumeLevelsControlsMenuItem() {
   else
 
     amixerPercentage="`corgiFetchSubstringBetween "$amixerOut" '[' '%]'`"
+<<<<<<< HEAD
     label="$percentage%"
 
+=======
+ 
+>>>>>>> corgi-audio-management: add icons to openbox menu, to indicate volume level and muted state
     # Sometimes, either Alsa sets the volume a percentage off, or reads the volume a percentage off.
     # This is a workable compromise...
     if [ $amixerPercentage -ge $percentage ] && [ $amixerPercentage -lt $(($percentage + 5)) ]
@@ -139,16 +147,26 @@ buildSetVolumeLevelsControlsMenuItem() {
 
       if corgiHasSubstring "$amixerOut" '[off]'
       then
+<<<<<<< HEAD
         icon="$muteVolumeIconSecondary"
         label="$label (muted)"
       else
         icon="$maxVolumeIcon"
+=======
+        icon="icon:$muteVolumeIconSecondary"
+      else
+        icon="icon:$maxVolumeIcon"
+>>>>>>> corgi-audio-management: add icons to openbox menu, to indicate volume level and muted state
       fi
 
     fi
 
     setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; $percentage &quot;$control&quot; $shouldUsePulseAudio"
+<<<<<<< HEAD
     setVolumeLevelMenuItem="`corgiObMenuItem "label:$label" "icon:$icon" "action:Execute" "command:$setVolumeLevelCommand"`"
+=======
+    setVolumeLevelMenuItem="`corgiObMenuItem "label:$percentage%" $icon "action:Execute" "command:$setVolumeLevelCommand"`"
+>>>>>>> corgi-audio-management: add icons to openbox menu, to indicate volume level and muted state
 
   fi
 
