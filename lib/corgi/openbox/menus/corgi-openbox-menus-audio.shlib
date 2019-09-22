@@ -54,7 +54,7 @@ hasPulseAudio=false
 
 if ! corgiHasCommand aplay || ! corgiHasCommand arecord
 then
-  logger "ERROR (corgi-openbox-menus-displays.shlib): alsa not found. Please install alsa."
+  logger "ERROR (corgi-openbox-menus-displays.shlib): alsa utils not found. Please install alsa utils."
 else 
   hasAlsa=true
 fi
@@ -65,6 +65,97 @@ then
 else 
   hasPulseAudio=true
 fi
+
+
+buildSetVolumeLevelsControlsMenuItem() {
+
+  control="$1"
+  percentage="$2"
+  shouldUsePulseAudio=$2
+
+  percentageDefault=35
+
+  if [ -z "$percentage" ]
+  then
+    percentage=$percentageDefault
+    shouldUsePulseAudio="$2"
+  fi
+
+  if [ "$percentage" != 'mute' ] && [ "$percentage" != 'up' ] && [ "$percentage" != 'down' ]
+  then
+
+    if [ $percentage -lt 0 ] || [ $percentage -gt 100 ]
+    then
+      percentage=$percentageDefault
+    fi
+
+  fi
+
+  if [ -z "$shouldUsePulseAudio" ] || [ $shouldUsePulseAudio != true ]
+  then
+    shouldUsePulseAudio=false 
+  fi
+
+  setVolumeLevelMenuItem=''
+  maxVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-max.png"
+  muteVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-mute.png"
+  muteVolumeIconSecondary="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-mute-secondary.png"
+
+  amixerOut="`amixer get $control | grep '%'`"
+  icon=''
+
+  if [ "$percentage" = 'mute' ]
+  then
+
+    if corgiHasSubstring "$amixerOut" '[off]'
+    then
+      icon="icon:$muteVolumeIcon"
+    fi
+
+    setVolumeLevelCommand="corgi-audio-control &quot;mute&quot; &quot;$control&quot; $shouldUsePulseAudio"
+    setVolumeLevelMenuItem="`corgiObMenuItem "label:Mute / Unmute" "$icon" "action:Execute" "command:$setVolumeLevelCommand"`"
+
+  elif [ "$percentage" = 'up' ]
+  then
+
+    setVolumeLevelCommand="corgi-audio-control &quot;up&quot; &quot;$control&quot; $shouldUsePulseAudio"
+    setVolumeLevelMenuItem="`corgiObMenuItem "label:Higher" "action:Execute" "command:$setVolumeLevelCommand"`"
+
+  elif [ "$percentage" = 'down' ]
+  then
+
+    setVolumeLevelCommand="corgi-audio-control &quot;down&quot; &quot;$control&quot; $shouldUsePulseAudio"
+    setVolumeLevelMenuItem="`corgiObMenuItem "label:Lower" "action:Execute" "command:$setVolumeLevelCommand"`"
+
+  else
+
+    amixerPercentage="`corgiFetchSubstringBetween "$amixerOut" '[' '%]'`"
+    label="$percentage%"
+
+    # Sometimes, either Alsa sets the volume a percentage off, or reads the volume a percentage off.
+    # This is a workable compromise...
+    if [ $amixerPercentage -ge $percentage ] && [ $amixerPercentage -lt $(($percentage + 5)) ]
+    then
+
+      if corgiHasSubstring "$amixerOut" '[off]'
+      then
+        icon="$muteVolumeIconSecondary"
+        label="$label (muted)"
+      else
+        icon="$maxVolumeIcon"
+      fi
+
+    fi
+
+    setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; $percentage &quot;$control&quot; $shouldUsePulseAudio"
+    setVolumeLevelMenuItem="`corgiObMenuItem "label:$label" "icon:$icon" "action:Execute" "command:$setVolumeLevelCommand"`"
+
+  fi
+
+  echo "$setVolumeLevelMenuItem"
+  exit $?
+
+}
 
 
 # Generates and echoes Openbox menus (as an XML-formatted string) which permits the manipulation of audio output level.
@@ -80,75 +171,29 @@ buildVolumeLevelsControlsMenu() {
     shouldUsePulseAudio=false 
   fi
 
-  muteVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-mute.png"
-  setVolumeLevelCommand="corgi-audio-control &quot;mute&quot; &quot;$control&quot;"
-  setVolumeLevelMenuItems="`corgiObMenuItem "label:Mute/Unmute" "icon=$muteVolumeIcon" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;up&quot; &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:Higher" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;down&quot; &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:Lower" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  minVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-min.png"
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 10 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:10%" "icon=$minVolumeIcon" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 15 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:15%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 20 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:20%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 25 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:25%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 30 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:30%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 35 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:35%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 40 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:40%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 45 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:45%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 50 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:50%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 55 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:55%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 60 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:60%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 65 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:65%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 70 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:70%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 75 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:75%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 80 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:80%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 85 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:85%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 90 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:90%" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 95 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:95%" "action:Execute" "command:$setVolumeLevelCommand"`"  
-  
-  maxVolumeIcon="$parentDirectory/share/icons/corgi/openbox/menus/audio/audio-volume-max.png"
-  setVolumeLevelCommand="corgi-audio-control &quot;percent&quot; 100 &quot;$control&quot; $shouldUsePulseAudio"
-  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`corgiObMenuItem "label:100%" "icon=$maxVolumeIcon" "action:Execute" "command:$setVolumeLevelCommand"`"
-  
+  setVolumeLevelMenuItems="`buildSetVolumeLevelsControlsMenuItem "$control" "mute" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "up" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "down" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "10" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "15" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "20" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "25" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "30" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "35" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "40" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "45" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "50" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "55" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "60" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "65" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "70" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "75" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "80" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "85" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "90" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "95" $shouldUsePulseAudio`"
+  setVolumeLevelMenuItems="$setVolumeLevelMenuItems`buildSetVolumeLevelsControlsMenuItem "$control" "100" $shouldUsePulseAudio`"
+ 
   echo "`corgiObPipeMenu "content:$setVolumeLevelMenuItems"`"
   exit $?
 
@@ -307,12 +352,10 @@ buildDevicesAlsaPcmsMenuItems() {
   cardName="$1"
   devNumber=$2
   
-  grepSearchText="[C]ARD=$cardName,DEV=$devNumber"
+  grepSearchText="CARD=$cardName,DEV=$devNumber"
 
-  pcmsMenuItems=''
+  aplay --list-pcms | grep $grepSearchText | {
 
-  aplay --list-pcms | grep "$grepSearchText" | {
-  
     while read -r line
     do
 
@@ -320,7 +363,7 @@ buildDevicesAlsaPcmsMenuItems() {
       control="`corgiFetchSubstringBefore "$controlAndCard" ':'`"
       card=": `corgiFetchSubstringBetween "$controlAndCard" 'CARD=' ','`"
       device=", `corgiFetchSubstringAfter "$line" 'DEV='`"
-
+  
       pcmsMenuItems="$pcmsMenuItems`corgiObMenuItem "label:$control$card$device"`"
 
     done
